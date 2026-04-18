@@ -1,0 +1,658 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- This URDF was automatically created by SolidWorks to URDF Exporter! Originally created by Stephen Brawner (brawner@gmail.com) 
+     Commit Version: 1.6.0-4-g7f85cfe  Build Version: 1.6.7995.38578
+     For more information, please see http://wiki.ros.org/sw_urdf_exporter -->
+<robot
+  name="senior_akm_bs_robot">
+  <link
+    name="base_link">
+    <inertial>
+      <origin
+        xyz="-0.0417629978099866 0.00249124815827134 0.0504224374990905"
+        rpy="0 0 0" />
+      <mass
+        value="1.24598197258781" />
+      <inertia
+        ixx="0.00282268946726676"
+        ixy="-1.12939856585825E-05"
+        ixz="1.8865832624848E-06"
+        iyy="0.0058966496684352"
+        iyz="9.18152927508935E-07"
+        izz="0.00843643773954023" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://turn_on_wheeltec_robot/meshes/senior_akm_bs_meshes/base_link.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.741176470588235 0.901960784313726 0.956862745098039 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://turn_on_wheeltec_robot/meshes/senior_akm_bs_meshes/base_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <link
+    name="lf_wheel_link">
+    <inertial>
+      <origin
+        xyz="-4.56149918753868E-07 0.00161800735373929 1.6006002091902E-05"
+        rpy="0 0 0" />
+      <mass
+        value="0.282382360428229" />
+      <inertia
+        ixx="0.000386424345576751"
+        ixy="-5.52685862452736E-08"
+        ixz="-3.98123463322762E-09"
+        iyy="0.000685587977863506"
+        iyz="2.23841146555705E-08"
+        izz="0.000386465342528593" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://turn_on_wheeltec_robot/meshes/senior_akm_bs_meshes/lf_wheel_link.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.349019607843137 0.349019607843137 0.349019607843137 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://turn_on_wheeltec_robot/meshes/senior_akm_bs_meshes/lf_wheel_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="lf_joint"
+    type="continuous">
+    <origin
+      xyz="0.16117 0.15428 0.0241"
+      rpy="0 0 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="lf_wheel_link" />
+    <axis
+      xyz="-0.00018436 1 0" />
+  </joint>
+  <link
+    name="lb_wheel_link">
+    <inertial>
+      <origin
+        xyz="-9.62241866464542E-08 0.00161800831026115 -1.60072157381411E-05"
+        rpy="0 0 0" />
+      <mass
+        value="0.282382358037432" />
+      <inertia
+        ixx="0.00038642432665184"
+        ixy="1.15855658124732E-10"
+        ixz="-3.92538349939442E-09"
+        iyy="0.000685587983211434"
+        iyz="-2.23851826874767E-08"
+        izz="0.000386465346251272" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://turn_on_wheeltec_robot/meshes/senior_akm_bs_meshes/lb_wheel_link.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.349019607843137 0.349019607843137 0.349019607843137 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://turn_on_wheeltec_robot/meshes/senior_akm_bs_meshes/lb_wheel_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="lb_joint"
+    type="continuous">
+    <origin
+      xyz="-0.15752 0.15588 0.024"
+      rpy="0 0 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="lb_wheel_link" />
+    <axis
+      xyz="0 1 0" />
+  </joint>
+  <link
+    name="rb_wheel_link">
+    <inertial>
+      <origin
+        xyz="6.80499422991976E-06 -0.00161799269873991 -1.47284708907555E-05"
+        rpy="0 0 0" />
+      <mass
+        value="0.282382030731183" />
+      <inertia
+        ixx="0.000386426874190313"
+        ixy="-7.98439514625743E-09"
+        ixz="-1.24822395851521E-08"
+        iyy="0.000685587938513324"
+        iyz="2.05685167109786E-08"
+        izz="0.000386462728540434" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://turn_on_wheeltec_robot/meshes/senior_akm_bs_meshes/rb_wheel_link.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.349019607843137 0.349019607843137 0.349019607843137 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://turn_on_wheeltec_robot/meshes/senior_akm_bs_meshes/rb_wheel_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="rb_joint"
+    type="continuous">
+    <origin
+      xyz="-0.15752 -0.15435 0.024"
+      rpy="0 0 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="rb_wheel_link" />
+    <axis
+      xyz="0 -1 0" />
+  </joint>
+  <link
+    name="rf_wheel_link">
+    <inertial>
+      <origin
+        xyz="-9.62250057690017E-08 -0.00161800831051309 1.60072157380856E-05"
+        rpy="0 0 0" />
+      <mass
+        value="0.282382358037432" />
+      <inertia
+        ixx="0.000386424326651841"
+        ixy="-1.15855656039432E-10"
+        ixz="3.92538350049684E-09"
+        iyy="0.000685587983211434"
+        iyz="-2.23851826875511E-08"
+        izz="0.000386465346251271" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://turn_on_wheeltec_robot/meshes/senior_akm_bs_meshes/rf_wheel_link.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.349019607843137 0.349019607843137 0.349019607843137 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://turn_on_wheeltec_robot/meshes/senior_akm_bs_meshes/rf_wheel_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="rf_joint"
+    type="continuous">
+    <origin
+      xyz="0.161178319987049 -0.152948363991073 0.0241"
+      rpy="0 0 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="rf_wheel_link" />
+    <axis
+      xyz="0 -1 0" />
+  </joint>
+  <link
+    name="camera_link">
+    <inertial>
+      <origin
+        xyz="-3.7325679416722E-07 -3.53608061424754E-07 1.07624233507825E-07"
+        rpy="0 0 0" />
+      <mass
+        value="0.0559842512080098" />
+      <inertia
+        ixx="0.000130810959339214"
+        ixy="1.20255128206292E-07"
+        ixz="1.62335437080103E-06"
+        iyy="1.91148634967897E-05"
+        iyz="-2.8001675579971E-08"
+        izz="0.000131387469523028" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://turn_on_wheeltec_robot/meshes/senior_akm_bs_meshes/camera_link.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://turn_on_wheeltec_robot/meshes/senior_akm_bs_meshes/camera_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="camera_joint"
+    type="fixed">
+    <origin
+      xyz="0.16578 0.00094564 0.089704"
+      rpy="0 0 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="camera_link" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="laser_link">
+    <inertial>
+      <origin
+        xyz="-0.00239460672357819 4.36236017554063E-06 0.00454035676262853"
+        rpy="0 0 0" />
+      <mass
+        value="0.0391766918315595" />
+      <inertia
+        ixx="2.82296075703084E-05"
+        ixy="-2.19900476429522E-09"
+        ixz="-1.07118438707009E-06"
+        iyy="3.37984497846769E-05"
+        iyz="-6.83962976967362E-10"
+        izz="4.50920076504658E-05" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://turn_on_wheeltec_robot/meshes/senior_akm_bs_meshes/laser_link.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.376470588235294 0.376470588235294 0.376470588235294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://turn_on_wheeltec_robot/meshes/senior_akm_bs_meshes/laser_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="laser_joint"
+    type="fixed">
+    <origin
+      xyz="0.087145 0.00066764 0.11102"
+      rpy="0 0 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="laser_link" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="controller_link">
+    <inertial>
+      <origin
+        xyz="-0.0736189387358788 0.00862047603179353 0.0188007968554351"
+        rpy="0 0 0" />
+      <mass
+        value="2.9647075222323" />
+      <inertia
+        ixx="0.0409533327672851"
+        ixy="-9.34915343779573E-05"
+        ixz="0.00114295526160858"
+        iyy="0.0643821510780181"
+        iyz="0.000124808189746267"
+        izz="0.0924525708985749" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://turn_on_wheeltec_robot/meshes/senior_akm_bs_meshes/controller_link.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.741176470588235 0.901960784313726 0.956862745098039 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://turn_on_wheeltec_robot/meshes/senior_akm_bs_meshes/controller_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="controller_joint"
+    type="fixed">
+    <origin
+      xyz="0.046179 -0.0078132 0.028"
+      rpy="0 0 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="controller_link" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="lf_1_link">
+    <inertial>
+      <origin
+        xyz="-9.7424971132215E-05 0.0572882152779554 -0.0164768479850437"
+        rpy="0 0 0" />
+      <mass
+        value="0.301019543993547" />
+      <inertia
+        ixx="0.000389292653819676"
+        ixy="-3.39793728571195E-07"
+        ixz="-3.73491002448414E-09"
+        iyy="0.000688035493837601"
+        iyz="-7.74270425327479E-08"
+        izz="0.0003896892985751" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://turn_on_wheeltec_robot/meshes/senior_akm_bs_meshes/lf_1_link.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://turn_on_wheeltec_robot/meshes/senior_akm_bs_meshes/lf_1_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="lf_1_joint"
+    type="revolute">
+    <origin
+      xyz="0.16118 0.095668 0.0404"
+      rpy="0 0 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="lf_1_link" />
+    <axis
+      xyz="0 0 -1" />
+    <limit
+      lower="-0.52"
+      upper="0.52"
+      effort="0"
+      velocity="0" />
+    <dynamics
+      friction="100" />
+  </joint>
+  <link
+    name="lf_2_link">
+    <inertial>
+      <origin
+        xyz="-0.00344981524415326 0.0292959672032245 -0.00150000000000002"
+        rpy="0 0 0" />
+      <mass
+        value="0.00159661927962384" />
+      <inertia
+        ixx="5.1763724267007E-07"
+        ixy="5.99286802579284E-08"
+        ixz="-5.9804115995578E-23"
+        iyy="1.57775669111271E-08"
+        iyz="2.84729447863901E-22"
+        izz="5.2744557685631E-07" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://turn_on_wheeltec_robot/meshes/senior_akm_bs_meshes/lf_2_link.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.741176470588235 0.901960784313726 0.956862745098039 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://turn_on_wheeltec_robot/meshes/senior_akm_bs_meshes/lf_2_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="lf_2_joint"
+    type="revolute">
+    <origin
+      xyz="0.13928 0.030665 0.0146"
+      rpy="0 0 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="lf_2_link" />
+    <axis
+      xyz="0 0 -1" />
+    <limit
+      lower="-0.52"
+      upper="0.52"
+      effort="0"
+      velocity="0" />
+    <dynamics
+      friction="100" />
+  </joint>
+  <link
+    name="rf_1_link">
+    <inertial>
+      <origin
+        xyz="-8.77057005097548E-05 -0.057288232242606 -0.0164768468504404"
+        rpy="0 0 0" />
+      <mass
+        value="0.30101954160275" />
+      <inertia
+        ixx="0.000389292529973084"
+        ixy="2.83815640002654E-07"
+        ixz="3.69745960164851E-09"
+        iyy="0.000688035604107211"
+        iyz="7.74260177462023E-08"
+        izz="0.000389689302297778" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://turn_on_wheeltec_robot/meshes/senior_akm_bs_meshes/rf_1_link.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.741176470588235 0.901960784313726 0.956862745098039 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://turn_on_wheeltec_robot/meshes/senior_akm_bs_meshes/rf_1_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="rf_1_joint"
+    type="revolute">
+    <origin
+      xyz="0.16118 -0.094332 0.0404"
+      rpy="0 0 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="rf_1_link" />
+    <axis
+      xyz="0 0 -1" />
+    <limit
+      lower="-0.52"
+      upper="0.52"
+      effort="0"
+      velocity="0" />
+    <dynamics
+      friction="100" />
+  </joint>
+  <link
+    name="rf_2_link">
+    <inertial>
+      <origin
+        xyz="-0.00299029511286282 -0.0253861009514918 -0.00150000000000001"
+        rpy="0 0 0" />
+      <mass
+        value="0.00159661927962382" />
+      <inertia
+        ixx="5.17633072713893E-07"
+        ixy="-5.99461377648315E-08"
+        ixz="2.24233125948918E-23"
+        iyy="1.57817368672975E-08"
+        iyz="3.01401778876294E-22"
+        izz="5.27445576856303E-07" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://turn_on_wheeltec_robot/meshes/senior_akm_bs_meshes/rf_2_link.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.741176470588235 0.901960784313726 0.956862745098039 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://turn_on_wheeltec_robot/meshes/senior_akm_bs_meshes/rf_2_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="rf_2_joint"
+    type="revolute">
+    <origin
+      xyz="0.139278596541847 -0.0293350883356749 0.0146"
+      rpy="0 0 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="rf_2_link" />
+    <axis
+      xyz="0 0 -1" />
+    <limit
+      lower="-0.52"
+      upper="0.52"
+      effort="0"
+      velocity="0" />
+    <dynamics
+      friction="100" />
+  </joint>
+</robot>

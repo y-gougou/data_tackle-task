@@ -1,0 +1,365 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- This URDF was automatically created by SolidWorks to URDF Exporter! Originally created by Stephen Brawner (brawner@gmail.com) 
+     Commit Version: 1.6.0-4-g7f85cfe  Build Version: 1.6.7995.38578
+     For more information, please see http://wiki.ros.org/sw_urdf_exporter -->
+<robot
+  name="v550_robot_ack_description">
+  <link
+    name="base_link">
+    <inertial>
+      <origin
+        xyz="-0.0156955093743002 0.000167812407275415 0.0682851211512334"
+        rpy="0 0 0" />
+      <mass
+        value="0.426115687895387" />
+      <inertia
+        ixx="0.000965907358936851"
+        ixy="-1.54504309400277E-06"
+        ixz="1.66464348632251E-05"
+        iyy="0.00192246228026252"
+        iyz="2.24433199961353E-07"
+        izz="0.00274216909437085" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://turn_on_wheeltec_robot/meshes/V550_akm_robot_meshes/base_link.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.741176470588235 0.901960784313726 0.956862745098039 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://turn_on_wheeltec_robot/meshes/V550_akm_robot_meshes/base_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <link
+    name="camera_Link">
+    <inertial>
+      <origin
+        xyz="-0.0104399589126471 -0.000146928727581953 -0.0150728462184276"
+        rpy="0 0 0" />
+      <mass
+        value="0.028640037923805" />
+      <inertia
+        ixx="1.75335887015322E-05"
+        ixy="3.52453752354274E-09"
+        ixz="-2.96081731318371E-08"
+        iyy="1.91267196643144E-06"
+        iyz="2.99614530165611E-09"
+        izz="1.67494387173248E-05" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://turn_on_wheeltec_robot/meshes/V550_akm_robot_meshes/camera_Link.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.627450980392157 0.627450980392157 0.627450980392157 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://turn_on_wheeltec_robot/meshes/V550_akm_robot_meshes/camera_Link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="camera_joint"
+    type="fixed">
+    <origin
+      xyz="0.034288 5.605E-05 0.17271"
+      rpy="0 0 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="camera_Link" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="lidar_Link">
+    <inertial>
+      <origin
+        xyz="-0.00250630311444935 4.56584075365223E-06 0.00608265171398317"
+        rpy="0 0 0" />
+      <mass
+        value="0.0374307357732493" />
+      <inertia
+        ixx="2.80476450246834E-05"
+        ixy="-2.19900316058061E-09"
+        ixz="-1.0711843868727E-06"
+        iyy="3.36164872388918E-05"
+        iyz="-6.83963733327609E-10"
+        izz="4.50845485883219E-05" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://turn_on_wheeltec_robot/meshes/V550_akm_robot_meshes/lidar_Link.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.376470588235294 0.376470588235294 0.376470588235294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://turn_on_wheeltec_robot/meshes/V550_akm_robot_meshes/lidar_Link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="lidar_joint"
+    type="fixed">
+    <origin
+      xyz="0.099309 0 0.096024"
+      rpy="0 0 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="lidar_Link" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="f_l_link">
+    <inertial>
+      <origin
+        xyz="4.97883802241805E-09 -0.0029694703939309 -4.95700029114199E-08"
+        rpy="0 0 0" />
+      <mass
+        value="0.0437084164824698" />
+      <inertia
+        ixx="1.79426399357041E-05"
+        ixy="1.01076586055769E-11"
+        ixz="3.32027539343488E-12"
+        iyy="3.11204827864545E-05"
+        iyz="-1.74090133193252E-11"
+        izz="1.79426375850488E-05" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://turn_on_wheeltec_robot/meshes/V550_akm_robot_meshes/f_l_link.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.792156862745098 0.819607843137255 0.933333333333333 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://turn_on_wheeltec_robot/meshes/V550_akm_robot_meshes/f_l_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="f_l_joint"
+    type="continuous">
+    <origin
+      xyz="0.084421 0.085111 0.033"
+      rpy="0 0 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="f_l_link" />
+    <axis
+      xyz="0 -1 0" />
+  </joint>
+  <link
+    name="f_r_link">
+    <inertial>
+      <origin
+        xyz="-3.19741280535579E-08 0.00296947034067659 -3.72579770837461E-08"
+        rpy="0 0 0" />
+      <mass
+        value="0.043708416132762" />
+      <inertia
+        ixx="1.7942636053809E-05"
+        ixy="1.93985117723528E-11"
+        ixz="-1.87740535762806E-12"
+        iyy="3.11204824365473E-05"
+        iyz="8.33197254204452E-12"
+        izz="1.79426410767556E-05" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://turn_on_wheeltec_robot/meshes/V550_akm_robot_meshes/f_r_link.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.792156862745098 0.819607843137255 0.933333333333333 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://turn_on_wheeltec_robot/meshes/V550_akm_robot_meshes/f_r_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="f_r_joint"
+    type="continuous">
+    <origin
+      xyz="0.08444 -0.085164 0.033"
+      rpy="0 0 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="f_r_link" />
+    <axis
+      xyz="0 1 0" />
+  </joint>
+  <link
+    name="r_r_link">
+    <inertial>
+      <origin
+        xyz="-4.72018535646601E-08 0.00296947085111417 -1.53772663769036E-08"
+        rpy="0 0 0" />
+      <mass
+        value="0.0437084145724646" />
+      <inertia
+        ixx="1.79426351166838E-05"
+        ixy="1.97960020034279E-11"
+        ixz="1.41725549491033E-12"
+        iyy="3.11204822304997E-05"
+        iyz="-1.57525914707492E-12"
+        izz="1.79426415060117E-05" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://turn_on_wheeltec_robot/meshes/V550_akm_robot_meshes/r_r_link.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.792156862745098 0.819607843137255 0.933333333333333 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://turn_on_wheeltec_robot/meshes/V550_akm_robot_meshes/r_r_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="r_r_joint"
+    type="continuous">
+    <origin
+      xyz="-0.058832 -0.0852 0.0365"
+      rpy="0 0 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="r_r_link" />
+    <axis
+      xyz="0 1 0" />
+  </joint>
+  <link
+    name="r_l_link">
+    <inertial>
+      <origin
+        xyz="-2.42357146296168E-08 -0.00296947040355186 -4.26581211986077E-08"
+        rpy="0 0 0" />
+      <mass
+        value="0.0437084164179523" />
+      <inertia
+        ixx="1.79426418194424E-05"
+        ixy="-2.99881004687699E-12"
+        ixz="-3.55062589373155E-14"
+        iyy="3.11204825991065E-05"
+        iyz="-1.96589651426672E-11"
+        izz="1.79426355027658E-05" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://turn_on_wheeltec_robot/meshes/V550_akm_robot_meshes/r_l_link.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.792156862745098 0.819607843137255 0.933333333333333 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://turn_on_wheeltec_robot/meshes/V550_akm_robot_meshes/r_l_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="r_l_joint"
+    type="continuous">
+    <origin
+      xyz="-0.058832 0.0852 0.0365"
+      rpy="0 0 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="r_l_link" />
+    <axis
+      xyz="0 -1 0" />
+  </joint>
+</robot>

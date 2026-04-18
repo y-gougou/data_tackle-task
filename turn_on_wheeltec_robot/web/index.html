@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WHEELTEC 遥控面板</title>
+  <style>
+    :root {
+      --bg: #edf2f4; --panel: rgba(255,255,255,0.94); --text: #12242e;
+      --muted: #617481; --accent: #007f73; --accent-soft: #d9f3ef;
+      --accent-strong: #005b53; --danger: #c53b3b; --danger-soft: #fde8e8;
+      --border: rgba(18,36,46,0.1); --shadow: 0 20px 44px rgba(16,36,48,0.12);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh;
+      font-family: "Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+      color: var(--text);
+      background: radial-gradient(circle at top left,rgba(0,127,115,0.16),transparent 34%),
+        radial-gradient(circle at bottom right,rgba(32,98,165,0.1),transparent 30%), var(--bg);
+    }
+    .shell { width: min(1180px,100%); margin: 0 auto; padding: 22px 16px 42px; }
+    .hero, .control-grid, .stats-grid { display: grid; gap: 16px; }
+    .hero, .control-grid { grid-template-columns: 1.12fr 0.88fr; }
+    .panel {
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 22px; box-shadow: var(--shadow); padding: 18px;
+      backdrop-filter: blur(12px);
+    }
+    h1, h2, p { margin: 0; }
+    h1 { font-size: clamp(28px,4.2vw,42px); letter-spacing: -0.04em; margin: 10px 0 8px; }
+    h2 { font-size: 18px; margin-bottom: 14px; }
+    .muted { color: var(--muted); }
+    .status-chip {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 8px 12px; border-radius: 999px;
+      background: var(--accent-soft); color: var(--accent);
+      font-size: 13px; font-weight: 700;
+    }
+    .status-chip::before {
+      content: ""; width: 10px; height: 10px; border-radius: 50%;
+      background: currentColor; opacity: 0.85;
+    }
+    .status-chip.offline { background: #e9eef1; color: #697b88; }
+    .status-chip.danger  { background: var(--danger-soft); color: var(--danger); }
+    .status-chip.turbo   { background: #fff3cd; color: #856404; }
+    .connection-grid, .stats-grid, .telemetry-list, .tune-grid, .controller-grid {
+      display: grid; gap: 12px;
+    }
+    .connection-grid, .stats-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+    .stats-grid { margin-top: 16px; }
+    .metric, .telemetry-item, .tune-card {
+      border-radius: 16px; border: 1px solid var(--border); background: #f8fbfc;
+    }
+    .metric { padding: 14px; }
+    .metric-label { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+    .metric-value { font-size: 27px; font-weight: 800; letter-spacing: -0.04em; }
+    label { display: block; margin-bottom: 8px; font-size: 13px; color: var(--muted); }
+    input:not([type="range"]) {
+      width: 100%; padding: 12px; border: 1px solid var(--border);
+      border-radius: 12px; background: #fff; font-size: 15px;
+    }
+    input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer; }
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+    button {
+      border: 0; border-radius: 999px; padding: 12px 18px;
+      font-size: 14px; font-weight: 700; cursor: pointer;
+      transition: transform 120ms ease;
+    }
+    button:hover { transform: translateY(-1px); }
+    button.primary  { background: var(--accent); color: #fff; }
+    button.secondary { background: #e7eff2; color: var(--text); }
+    button.danger   { background: var(--danger); color: #fff; }
+    .joystick-wrap { display: grid; gap: 14px; }
+    .joystick-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .hint-pill {
+      padding: 8px 12px; border-radius: 999px; background: #e7f5f2;
+      color: var(--accent-strong); font-size: 12px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.08em;
+    }
+    .joystick {
+      width: min(100%,430px); aspect-ratio: 1; margin: 0 auto;
+      position: relative; overflow: hidden; border-radius: 30px;
+      border: 1px solid var(--border);
+      background: radial-gradient(circle at center,rgba(0,127,115,0.16),transparent 28%),
+        linear-gradient(145deg,#ffffff,#e7eff3);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.65); touch-action: none;
+    }
+    .joystick::before, .joystick::after {
+      content: ""; position: absolute; background: rgba(18,36,46,0.07);
+    }
+    .joystick::before { top: 0; left: calc(50% - 1px); width: 2px; height: 100%; }
+    .joystick::after  { left: 0; top: calc(50% - 1px); width: 100%; height: 2px; }
+    .knob {
+      position: absolute; left: calc(50% - 48px); top: calc(50% - 48px);
+      width: 96px; height: 96px; border-radius: 50%;
+      background: linear-gradient(145deg,#0d9586,#00685e);
+      box-shadow: 0 14px 28px rgba(0,127,115,0.28), inset 0 2px 4px rgba(255,255,255,0.3);
+      transition: transform 24ms linear;
+    }
+    .tune-grid { grid-template-columns: repeat(3,minmax(0,1fr)); }
+    .controller-grid { margin-top: 12px; grid-template-columns: 1fr; }
+    .tune-card { padding: 14px; }
+    .tune-card strong { display: block; font-size: 19px; margin-top: 6px; letter-spacing: -0.04em; }
+    .telemetry-item {
+      display: flex; justify-content: space-between; gap: 12px;
+      padding: 12px 14px; font-size: 14px;
+    }
+    .controller-card {
+      padding: 14px; border-radius: 16px; border: 1px solid var(--border);
+      background: linear-gradient(145deg,#f7fbfc,#eef5f7);
+    }
+    .controller-top {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px; margin-bottom: 10px;
+    }
+    .controller-title { font-size: 15px; font-weight: 700; }
+    .controller-name  { font-size: 13px; color: var(--muted); line-height: 1.5; }
+    .speed-row { margin-top: 14px; }
+    .speed-row-inner { display: flex; align-items: center; gap: 12px; margin-top: 6px; }
+    .speed-val { font-size: 17px; font-weight: 800; min-width: 44px; text-align: right; }
+    .key-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+    .key-hint {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-width: 32px; height: 32px; padding: 0 8px; border-radius: 8px;
+      border: 1.5px solid var(--border); background: #f0f4f6;
+      font-size: 12px; font-weight: 700; font-family: Consolas,Monaco,monospace;
+      transition: background 80ms, border-color 80ms, color 80ms;
+    }
+    .key-hint.active { background: var(--accent); border-color: var(--accent-strong); color: #fff; }
+    .status-chip.recording { background: #fde8e8; color: #c53b3b; animation: pulse-rec 1.2s infinite; }
+    @keyframes pulse-rec { 0%,100%{ opacity:1; } 50%{ opacity:.55; } }
+    .status-chip.processing { background: #fff3cd; color: #856404; }
+    .file-list { display: grid; gap: 8px; max-height: 320px; overflow-y: auto; }
+    .file-row {
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      padding: 10px 14px; border-radius: 12px; border: 1px solid var(--border);
+      background: #f8fbfc; font-size: 13px;
+    }
+    .file-row .fname { font-weight: 700; word-break: break-all; flex: 1; }
+    .file-row .fmeta { color: var(--muted); white-space: nowrap; }
+    .file-row button { padding: 6px 14px; font-size: 12px; }
+    .rec-stats { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; }
+    .rec-stat { font-size: 14px; }
+    .rec-stat strong { font-size: 20px; font-weight: 800; display: block; letter-spacing: -0.03em; }
+    .mini-chart { width: 100%; height: 120px; border-radius: 12px; border: 1px solid var(--border); background: #0f222a; }
+    .chart-legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 6px; font-size: 12px; }
+    .chart-legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; vertical-align: middle; }
+    .chart-legend .c-vx::before  { background: #4fc3f7; }
+    .chart-legend .c-vy::before  { background: #81c784; }
+    .chart-legend .c-wz::before  { background: #ffb74d; }
+    .chart-legend .c-i0::before  { background: #e57373; }
+    .chart-legend .c-i1::before  { background: #ba68c8; }
+    .chart-legend .c-i2::before  { background: #fff176; }
+    .log {
+      margin-top: 16px; min-height: 90px; padding: 14px; border-radius: 16px;
+      background: #0f222a; color: #d9e7ed;
+      font: 13px/1.5 Consolas,Monaco,monospace; white-space: pre-wrap;
+    }
+    @media (max-width: 900px) { .hero, .control-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 560px) { .connection-grid, .stats-grid, .tune-grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <section class="hero">
+      <div class="panel">
+        <div class="status-chip offline" id="socketState">Disconnected</div>
+        <h1>WHEELTEC 遥控面板</h1>
+        <p class="muted">键盘 WASD/QE · Xbox 手柄 + 扳机 · 速度倍率滑块 · 全向移动。后端单次响应曲线，操控更线性。</p>
+        <div class="connection-grid" style="margin-top:16px;">
+          <div>
+            <label for="wsUrl">Rosbridge 地址</label>
+            <input id="wsUrl" />
+          </div>
+          <div>
+            <label for="httpHint">面板地址</label>
+            <input id="httpHint" readonly />
+          </div>
+        </div>
+        <div class="actions">
+          <button class="primary"    id="connectBtn">连接</button>
+          <button class="secondary"  id="disconnectBtn">断开</button>
+          <button class="secondary"  id="stopBtn">停止</button>
+          <button class="danger"     id="estopBtn">急停</button>
+          <button class="secondary"  id="clearEstopBtn">解除急停</button>
+        </div>
+        <div class="stats-grid">
+          <div class="metric"><div class="metric-label">控制状态</div><div class="metric-value" id="controlStatus">idle</div></div>
+          <div class="metric"><div class="metric-label">电池电压</div><div class="metric-value" id="batteryVoltage">-- V</div></div>
+          <div class="metric"><div class="metric-label">实测线速度 X</div><div class="metric-value" id="linearX">0.00</div></div>
+          <div class="metric"><div class="metric-label">实测角速度 Z</div><div class="metric-value" id="angularZ">0.00</div></div>
+        </div>
+        <div class="log" id="logBox">等待连接…</div>
+      </div>
+
+      <div class="panel">
+        <h2>驱动调参</h2>
+        <div class="tune-grid">
+          <div class="tune-card"><span class="muted">指令刷新率</span><strong id="refreshRate">30 Hz</strong></div>
+          <div class="tune-card"><span class="muted">死区</span><strong id="deadzoneDisplay">0.07</strong></div>
+          <div class="tune-card"><span class="muted">最大速度</span><strong id="maxSpeedDisplay">1.0 m/s</strong></div>
+        </div>
+        <div class="speed-row">
+          <label for="speedSlider">速度倍率</label>
+          <div class="speed-row-inner">
+            <input type="range" id="speedSlider" min="30" max="150" value="100" step="5" />
+            <span class="speed-val" id="speedMultiplierDisplay">1.0×</span>
+          </div>
+        </div>
+        <div class="controller-grid">
+          <div class="controller-card">
+            <div class="controller-top">
+              <div>
+                <div class="controller-title">Xbox 手柄</div>
+                <div class="controller-name" id="gamepadName">未检测到手柄</div>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                <div class="status-chip offline" id="turboChip">Turbo OFF</div>
+                <div class="status-chip offline" id="gamepadState">Offline</div>
+              </div>
+            </div>
+            <div class="telemetry-list">
+              <div class="telemetry-item"><span>输入源</span><strong id="inputSource">Touch</strong></div>
+              <div class="telemetry-item"><span>左摇杆</span><strong>前后 / 转向</strong></div>
+              <div class="telemetry-item"><span>右摇杆 X</span><strong>横移</strong></div>
+              <div class="telemetry-item"><span>RT / LT</span><strong>前进 / 后退 (并行)</strong></div>
+              <div class="telemetry-item"><span>A 停 · B 急停 · X 解除 · Y Turbo</span><strong></strong></div>
+              <div class="telemetry-item"><span>LB / RB</span><strong>速度 −0.1× / +0.1×</strong></div>
+              <div class="telemetry-item"><span>轴值</span><strong id="gamepadAxes">--</strong></div>
+            </div>
+          </div>
+        </div>
+        <div class="controller-card" style="margin-top:12px;">
+          <div class="controller-title" style="margin-bottom:8px;">键盘</div>
+          <div class="key-row">
+            <span class="key-hint" id="kQ">Q</span>
+            <span class="key-hint" id="kW">W</span>
+            <span class="key-hint" id="kE">E</span>
+            <span class="key-hint" id="kA">A</span>
+            <span class="key-hint" id="kS">S</span>
+            <span class="key-hint" id="kD">D</span>
+            <span class="key-hint" id="kUp">↑</span>
+            <span class="key-hint" id="kDown">↓</span>
+            <span class="key-hint" id="kLeft">←</span>
+            <span class="key-hint" id="kRight">→</span>
+            <span class="key-hint" id="kSpace">SPC</span>
+            <span class="key-hint" id="kShift">⇧ Turbo</span>
+          </div>
+          <div class="telemetry-list" style="margin-top:8px;">
+            <div class="telemetry-item"><span>W/S · ↑/↓</span><strong>前进 / 后退</strong></div>
+            <div class="telemetry-item"><span>A/D · ←/→</span><strong>左转 / 右转</strong></div>
+            <div class="telemetry-item"><span>Q / E</span><strong>左横移 / 右横移</strong></div>
+            <div class="telemetry-item"><span>Space</span><strong>停止</strong></div>
+            <div class="telemetry-item"><span>Shift (按住)</span><strong>Turbo 1.5×</strong></div>
+          </div>
+        </div>
+        <div class="telemetry-list" style="margin-top:12px;">
+          <div class="telemetry-item"><span>电流 Ch 0</span><strong id="current0">-- A</strong></div>
+          <div class="telemetry-item"><span>电流 Ch 1</span><strong id="current1">-- A</strong></div>
+          <div class="telemetry-item"><span>电流 Ch 2</span><strong id="current2">-- A</strong></div>
+          <div class="telemetry-item"><span>IMU 角速度 Z</span><strong id="imuGz">--</strong></div>
+          <div class="telemetry-item"><span>里程 X</span><strong id="odomX">--</strong></div>
+          <div class="telemetry-item"><span>里程 Y</span><strong id="odomY">--</strong></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="control-grid">
+      <div class="panel joystick-wrap">
+        <div class="joystick-header">
+          <div>
+            <h2>虚拟摇杆</h2>
+            <p class="muted">上下 = 速度，左右 = 转向</p>
+          </div>
+          <div class="hint-pill" id="inputPill">Touch</div>
+        </div>
+        <div class="joystick" id="joystick">
+          <div class="knob" id="knob"></div>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>指令预览</h2>
+        <div class="telemetry-list">
+          <div class="telemetry-item"><span>摇杆 X</span><strong id="stickX">0.00</strong></div>
+          <div class="telemetry-item"><span>摇杆 Y</span><strong id="stickY">0.00</strong></div>
+          <div class="telemetry-item"><span>驱动输入</span><strong id="driveInput">0.00</strong></div>
+          <div class="telemetry-item"><span>转向输入</span><strong id="turnInput">0.00</strong></div>
+          <div class="telemetry-item"><span>速度倍率</span><strong id="cmdMult">1.0×</strong></div>
+          <div class="telemetry-item"><span>指令 Linear X</span><strong id="cmdLinearX">0.00</strong></div>
+          <div class="telemetry-item"><span>指令 Linear Y (横移)</span><strong id="cmdLinearY">0.00</strong></div>
+          <div class="telemetry-item"><span>指令 Angular Z</span><strong id="cmdAngularZ">0.00</strong></div>
+        </div>
+        <h2 style="margin-top:16px;">实时曲线</h2>
+        <canvas class="mini-chart" id="chartVel"></canvas>
+        <div class="chart-legend">
+          <span class="c-vx">Vx</span><span class="c-vy">Vy</span><span class="c-wz">ωz</span>
+        </div>
+        <canvas class="mini-chart" id="chartCur" style="margin-top:10px;"></canvas>
+        <div class="chart-legend">
+          <span class="c-i0">I0</span><span class="c-i1">I1</span><span class="c-i2">I2</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="hero" style="margin-top:16px;">
+      <div class="panel">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+          <h2 style="margin-bottom:0;">数据采集</h2>
+          <div class="status-chip offline" id="recState">idle</div>
+        </div>
+        <p class="muted" style="margin-top:6px;">录制里程计、IMU、电压、电机电流到机器人端 CSV 文件。</p>
+        <div style="margin-top:10px;">
+          <label for="recLabel">录制标签 (写入文件名)</label>
+          <input id="recLabel" placeholder="e.g. normal, fault, overload..." style="max-width:320px;" />
+        </div>
+        <div class="actions">
+          <button class="primary" id="recStartBtn">开始录制</button>
+          <button class="danger"  id="recStopBtn">停止录制</button>
+          <button class="secondary" id="recRefreshBtn">刷新文件</button>
+        </div>
+        <div class="rec-stats" id="recStats">
+          <div class="rec-stat"><strong id="recCount">0</strong>采样数</div>
+          <div class="rec-stat"><strong id="recDuration">0s</strong>时长</div>
+          <div class="rec-stat"><strong id="recRate">--</strong>Hz</div>
+          <div class="rec-stat"><strong id="recFile">--</strong>文件</div>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>已录制文件</h2>
+        <div class="file-list" id="fileList">
+          <p class="muted">点击"刷新文件"加载列表。</p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    // ── DOM refs ──────────────────────────────────────────────────────────────
+    const socketState   = document.getElementById("socketState");
+    const wsUrlInput    = document.getElementById("wsUrl");
+    const httpHintInput = document.getElementById("httpHint");
+    const logBox        = document.getElementById("logBox");
+    const controlStatus = document.getElementById("controlStatus");
+    const batteryVoltage= document.getElementById("batteryVoltage");
+    const linearX       = document.getElementById("linearX");
+    const angularZ      = document.getElementById("angularZ");
+    const current0      = document.getElementById("current0");
+    const current1      = document.getElementById("current1");
+    const current2      = document.getElementById("current2");
+    const imuGz         = document.getElementById("imuGz");
+    const odomX         = document.getElementById("odomX");
+    const odomY         = document.getElementById("odomY");
+    const stickXEl      = document.getElementById("stickX");
+    const stickYEl      = document.getElementById("stickY");
+    const driveInputEl  = document.getElementById("driveInput");
+    const turnInputEl   = document.getElementById("turnInput");
+    const cmdLinearXEl  = document.getElementById("cmdLinearX");
+    const cmdLinearYEl  = document.getElementById("cmdLinearY");
+    const cmdAngularZEl = document.getElementById("cmdAngularZ");
+    const cmdMultEl     = document.getElementById("cmdMult");
+    const refreshRateEl = document.getElementById("refreshRate");
+    const deadzoneEl    = document.getElementById("deadzoneDisplay");
+    const maxSpeedEl    = document.getElementById("maxSpeedDisplay");
+    const gamepadStateEl= document.getElementById("gamepadState");
+    const gamepadNameEl = document.getElementById("gamepadName");
+    const gamepadAxesEl = document.getElementById("gamepadAxes");
+    const inputSourceEl = document.getElementById("inputSource");
+    const inputPillEl   = document.getElementById("inputPill");
+    const turboChipEl   = document.getElementById("turboChip");
+    const speedSlider   = document.getElementById("speedSlider");
+    const speedMultEl   = document.getElementById("speedMultiplierDisplay");
+    const joystick      = document.getElementById("joystick");
+    const knob          = document.getElementById("knob");
+
+    // ── Tuning constants ──────────────────────────────────────────────────────
+    const T = {
+      rosbridgePort:      9090,
+      maxLinear:          1.0,
+      maxLateral:         0.65,
+      maxAngular:         2.5,
+      deadzone:           0.07,
+      gamepadDeadzone:    0.08,
+      heartbeatMs:        250,
+      commandMs:          33,
+      speedMultiplierMax: 1.5,
+    };
+
+    // ── State ─────────────────────────────────────────────────────────────────
+    let socket          = null;
+    let heartbeatTimer  = null;
+    let commandTimer    = null;
+    let joystickActive  = false;
+    let normalized      = { x: 0, y: 0 };
+    let lateral         = 0;
+    let activeInputMode = "touch";
+    let gamepadIndex    = null;
+    let gamepadPollHandle = null;
+    let lastGpBtns      = { a:false, b:false, x:false, y:false, lb:false, rb:false };
+    let speedMultiplier = 1.0;
+    let turboActive     = false;
+    const keyState      = {};
+
+    // ── Init display ──────────────────────────────────────────────────────────
+    refreshRateEl.textContent = `${Math.round(1000 / T.commandMs)} Hz`;
+    deadzoneEl.textContent    = T.deadzone.toFixed(2);
+    maxSpeedEl.textContent    = `${T.maxLinear.toFixed(1)} m/s`;
+    wsUrlInput.value  = `ws://${window.location.hostname || "127.0.0.1"}:${T.rosbridgePort}`;
+    httpHintInput.value = window.location.href;
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+    function log(msg) {
+      const t = new Date().toLocaleTimeString();
+      logBox.textContent = `[${t}] ${msg}\n` + logBox.textContent;
+    }
+
+    function setSocketState(label, kind) {
+      socketState.textContent = label;
+      socketState.className = "status-chip" + (kind === "offline" ? " offline" : kind === "danger" ? " danger" : "");
+    }
+
+    function setGamepadState(label, kind, name) {
+      gamepadStateEl.textContent = label;
+      gamepadStateEl.className = "status-chip" + (kind === "offline" ? " offline" : kind === "danger" ? " danger" : "");
+      gamepadNameEl.textContent = name || "未检测到手柄";
+    }
+
+    function updateTurboDisplay() {
+      if (turboActive) {
+        turboChipEl.textContent = "Turbo ON";
+        turboChipEl.className = "status-chip turbo";
+      } else {
+        turboChipEl.textContent = "Turbo OFF";
+        turboChipEl.className = "status-chip offline";
+      }
+    }
+
+    function updateSpeedDisplay() {
+      const pct = (speedMultiplier * 100).toFixed(0);
+      speedMultEl.textContent = `${speedMultiplier.toFixed(1)}×`;
+      speedSlider.value = pct;
+    }
+
+    function send(payload) {
+      if (!socket || socket.readyState !== WebSocket.OPEN) return;
+      socket.send(JSON.stringify(payload));
+    }
+    function publish(topic, msg) { send({ op: "publish", topic, msg }); }
+    function subscribe(topic, type) { send({ op: "subscribe", topic, type, queue_length: 1 }); }
+
+    // Linear deadzone filter — no pre-shaping (backend does the curve once)
+    function linearAxis(value, dz) {
+      const mag = Math.abs(value);
+      if (mag <= dz) return 0;
+      return Math.sign(value) * Math.min(1, (mag - dz) / (1 - dz));
+    }
+
+    function effectiveMult() {
+      return turboActive ? Math.min(T.speedMultiplierMax, speedMultiplier * 1.5) : speedMultiplier;
+    }
+
+    function buildCommand() {
+      const mult  = effectiveMult();
+      const drive = linearAxis(-normalized.y, T.deadzone);
+      const turn  = linearAxis(normalized.x,  T.deadzone);
+      const lat   = linearAxis(lateral,       T.deadzone);
+      return {
+        drive, turn, lat, mult,
+        twist: {
+          linear:  { x: drive * T.maxLinear * mult, y: lat * T.maxLateral * mult, z: 0.0 },
+          angular: { x: 0.0, y: 0.0, z: -turn * T.maxAngular * mult }
+        }
+      };
+    }
+
+    function updateCommandReadout() {
+      const { drive, turn, lat, mult, twist } = buildCommand();
+      const src = activeInputMode === "gamepad" ? "Xbox" : activeInputMode === "keyboard" ? "Keyboard" : "Touch";
+      inputSourceEl.textContent = src;
+      inputPillEl.textContent   = src;
+      stickXEl.textContent      = normalized.x.toFixed(2);
+      stickYEl.textContent      = (-normalized.y).toFixed(2);
+      driveInputEl.textContent  = drive.toFixed(2);
+      turnInputEl.textContent   = turn.toFixed(2);
+      cmdMultEl.textContent     = mult.toFixed(2) + "×";
+      cmdLinearXEl.textContent  = twist.linear.x.toFixed(2);
+      cmdLinearYEl.textContent  = twist.linear.y.toFixed(2);
+      cmdAngularZEl.textContent = twist.angular.z.toFixed(2);
+    }
+
+    function publishCurrentCommand() { publish("/cmd_vel_web", buildCommand().twist); }
+
+    function renderKnob() {
+      const r = joystick.clientWidth * 0.32;
+      knob.style.transform = `translate(${normalized.x * r}px, ${normalized.y * r}px)`;
+    }
+
+    function publishStop() {
+      normalized = { x: 0, y: 0 }; lateral = 0;
+      renderKnob(); updateCommandReadout();
+      publish("/cmd_vel_web", { linear:{x:0,y:0,z:0}, angular:{x:0,y:0,z:0} });
+    }
+
+    function publishEstop(active) {
+      publish("/web/estop", { data: active });
+      if (active) setSocketState("E-STOP", "danger");
+      log(active ? "急停已锁定" : "急停已解除");
+    }
+
+    // ── Keyboard control ──────────────────────────────────────────────────────
+    const KEY_IDS = { w:"kW", a:"kA", s:"kS", d:"kD", q:"kQ", e:"kE", arrowup:"kUp", arrowdown:"kDown", arrowleft:"kLeft", arrowright:"kRight", " ":"kSpace", shift:"kShift" };
+
+    function setKeyVisual(key, active) {
+      const id = KEY_IDS[key];
+      if (id) {
+        const el = document.getElementById(id);
+        if (el) el.classList.toggle("active", active);
+      }
+    }
+
+    function syncKeyboard() {
+      if (joystickActive || activeInputMode === "gamepad") return;
+      const fwd = !!(keyState["w"] || keyState["arrowup"]);
+      const bwd = !!(keyState["s"] || keyState["arrowdown"]);
+      const lft = !!(keyState["a"] || keyState["arrowleft"]);
+      const rgt = !!(keyState["d"] || keyState["arrowright"]);
+      const latL = !!keyState["q"];
+      const latR = !!keyState["e"];
+      const nx  = (rgt ? 1 : 0) - (lft ? 1 : 0);
+      const ny  = (bwd ? 1 : 0) - (fwd ? 1 : 0);
+      const nl  = (latR ? 1 : 0) - (latL ? 1 : 0);
+      if (nx !== 0 || ny !== 0 || nl !== 0) {
+        activeInputMode = "keyboard";
+        normalized = { x: Math.max(-1, Math.min(1, nx)), y: Math.max(-1, Math.min(1, ny)) };
+        lateral = Math.max(-1, Math.min(1, nl));
+      } else if (activeInputMode === "keyboard") {
+        normalized = { x: 0, y: 0 }; lateral = 0;
+      }
+      renderKnob(); updateCommandReadout();
+    }
+
+    document.addEventListener("keydown", (e) => {
+      const key = e.key === " " ? " " : e.key.toLowerCase();
+      if (["w","a","s","d","q","e","arrowup","arrowdown","arrowleft","arrowright"].includes(key)) {
+        e.preventDefault();
+        if (!keyState[key]) { keyState[key] = true; setKeyVisual(key, true); syncKeyboard(); }
+      } else if (key === " ") {
+        e.preventDefault();
+        setKeyVisual(" ", true);
+        activeInputMode = "touch";
+        publishStop();
+      } else if (key === "shift") {
+        if (!turboActive) { turboActive = true; updateTurboDisplay(); setKeyVisual("shift", true); }
+      }
+    });
+
+    document.addEventListener("keyup", (e) => {
+      const key = e.key === " " ? " " : e.key.toLowerCase();
+      keyState[key] = false;
+      setKeyVisual(key, false);
+      if (key === "shift") { turboActive = false; updateTurboDisplay(); }
+      syncKeyboard();
+    });
+
+    // ── Gamepad ───────────────────────────────────────────────────────────────
+    function filterGpAxis(v) {
+      const dz = T.gamepadDeadzone;
+      const m  = Math.abs(v);
+      if (m <= dz) return 0;
+      return Math.sign(v) * Math.min(1, (m - dz) / (1 - dz));
+    }
+
+    function findGamepad() {
+      if (!navigator.getGamepads) return null;
+      const pads = navigator.getGamepads();
+      if (gamepadIndex !== null && pads[gamepadIndex]) return pads[gamepadIndex];
+      for (const p of pads) { if (p) { gamepadIndex = p.index; return p; } }
+      gamepadIndex = null; return null;
+    }
+
+    function syncGamepad() {
+      const pad = findGamepad();
+      if (!pad) {
+        lastGpBtns = { a:false, b:false, x:false, y:false, lb:false, rb:false };
+        if (!joystickActive && activeInputMode === "gamepad") {
+          activeInputMode = "touch"; normalized = { x:0, y:0 }; renderKnob(); updateCommandReadout();
+        }
+        setGamepadState("Offline", "offline", "未检测到手柄");
+        gamepadAxesEl.textContent = "--";
+        return;
+      }
+      setGamepadState("Ready", "ok", pad.id || `Gamepad ${pad.index}`);
+
+      const btn = (i) => !!pad.buttons[i]?.pressed;
+      const next = { a:btn(0), b:btn(1), x:btn(2), y:btn(3), lb:btn(4), rb:btn(5) };
+
+      if (next.a  && !lastGpBtns.a)  { publishStop(); log("A: stop"); }
+      if (next.b  && !lastGpBtns.b)  { publishEstop(true); }
+      if (next.x  && !lastGpBtns.x)  { publishEstop(false); }
+      if (next.y  && !lastGpBtns.y)  { turboActive = !turboActive; updateTurboDisplay(); log(`Turbo ${turboActive?"ON":"OFF"}`); }
+      if (next.lb && !lastGpBtns.lb) { speedMultiplier = Math.max(0.3, +(speedMultiplier - 0.1).toFixed(1)); updateSpeedDisplay(); log(`Speed: ${(speedMultiplier*100).toFixed(0)}%`); }
+      if (next.rb && !lastGpBtns.rb) { speedMultiplier = Math.min(T.speedMultiplierMax, +(speedMultiplier + 0.1).toFixed(1)); updateSpeedDisplay(); log(`Speed: ${(speedMultiplier*100).toFixed(0)}%`); }
+      lastGpBtns = next;
+
+      if (joystickActive) return;
+
+      // Left stick
+      const lx = filterGpAxis(pad.axes[0] || 0);
+      const ly = filterGpAxis(pad.axes[1] || 0);
+
+      // Right stick X → lateral
+      const rx = filterGpAxis(pad.axes[2] || 0);
+
+      // Triggers: buttons[6]=LT, buttons[7]=RT, value 0-1
+      const lt = pad.buttons[6]?.value || 0;
+      const rt = pad.buttons[7]?.value || 0;
+
+      // Combine: trigger overrides stick Y when trigger > threshold
+      let driveY = ly;
+      if (rt > 0.05) driveY = -rt;
+      if (lt > 0.05) driveY = lt;
+
+      const active = Math.abs(lx) > 0 || Math.abs(driveY) > 0 || Math.abs(rx) > 0;
+      gamepadAxesEl.textContent = `L:${lx.toFixed(2)},${driveY.toFixed(2)} R:${rx.toFixed(2)} T:${rt.toFixed(2)},${lt.toFixed(2)}`;
+
+      if (active) {
+        activeInputMode = "gamepad";
+        normalized = { x: lx, y: driveY };
+        lateral = rx;
+        renderKnob(); updateCommandReadout(); publishCurrentCommand();
+      } else if (activeInputMode === "gamepad") {
+        normalized = { x:0, y:0 }; lateral = 0; renderKnob(); updateCommandReadout();
+      }
+    }
+
+    function scheduleGamepadPolling() {
+      if (!window.requestAnimationFrame || gamepadPollHandle) return;
+      const tick = () => { gamepadPollHandle = requestAnimationFrame(tick); syncGamepad(); };
+      gamepadPollHandle = requestAnimationFrame(tick);
+    }
+
+    // ── Timers ────────────────────────────────────────────────────────────────
+    function startTimers() {
+      stopTimers();
+      heartbeatTimer = setInterval(() => publish("/web/heartbeat", {}), T.heartbeatMs);
+      commandTimer   = setInterval(() => publishCurrentCommand(), T.commandMs);
+    }
+    function stopTimers() {
+      clearInterval(heartbeatTimer); heartbeatTimer = null;
+      clearInterval(commandTimer);   commandTimer   = null;
+    }
+
+    let reconnectDelay  = 0;
+    let reconnectTimer  = null;
+
+    function cancelReconnect() {
+      clearTimeout(reconnectTimer); reconnectTimer = null; reconnectDelay = 0;
+    }
+
+    function scheduleReconnect() {
+      if (reconnectTimer) return;
+      reconnectDelay = reconnectDelay ? Math.min(reconnectDelay * 2, 16000) : 1000;
+      log(`${(reconnectDelay/1000).toFixed(0)}s 后重连...`);
+      reconnectTimer = setTimeout(() => { reconnectTimer = null; connect(); }, reconnectDelay);
+    }
+
+    // ── WebSocket ─────────────────────────────────────────────────────────────
+    function connect() {
+      disconnect();
+      socket = new WebSocket(wsUrlInput.value);
+      socket.onopen = () => {
+        cancelReconnect();
+        setSocketState("Connected", "ok");
+        log(`Connected to ${wsUrlInput.value}`);
+        subscribe("/odom",            "nav_msgs/Odometry");
+        subscribe("/imu",             "sensor_msgs/Imu");
+        subscribe("/PowerVoltage",    "std_msgs/Float32");
+        subscribe("/current_data",    "std_msgs/Float32MultiArray");
+        subscribe("/web/control_status", "std_msgs/String");
+        subscribe("/web/data_collect/status", "std_msgs/String");
+        startTimers();
+      };
+      socket.onmessage = (ev) => {
+        const p = JSON.parse(ev.data);
+        if (p.op !== "publish" || !p.msg) return;
+        if (p.topic === "/PowerVoltage") {
+          batteryVoltage.textContent = `${Number(p.msg.data||0).toFixed(2)} V`;
+        } else if (p.topic === "/current_data") {
+          const d = p.msg.data || [];
+          current0.textContent = `${Number(d[0]||0).toFixed(3)} A`;
+          current1.textContent = `${Number(d[1]||0).toFixed(3)} A`;
+          current2.textContent = `${Number(d[2]||0).toFixed(3)} A`;
+          pushSample(curBuf, "i0", Number(d[0]||0));
+          pushSample(curBuf, "i1", Number(d[1]||0));
+          pushSample(curBuf, "i2", Number(d[2]||0));
+        } else if (p.topic === "/imu") {
+          imuGz.textContent = Number(p.msg.angular_velocity?.z||0).toFixed(3);
+        } else if (p.topic === "/odom") {
+          const tw = p.msg.twist?.twist || {};
+          const po = p.msg.pose?.pose  || {};
+          linearX.textContent = Number(tw.linear?.x||0).toFixed(2);
+          angularZ.textContent= Number(tw.angular?.z||0).toFixed(2);
+          odomX.textContent   = Number(po.position?.x||0).toFixed(3);
+          odomY.textContent   = Number(po.position?.y||0).toFixed(3);
+          pushSample(velBuf, "vx", Number(tw.linear?.x||0));
+          pushSample(velBuf, "vy", Number(tw.linear?.y||0));
+          pushSample(velBuf, "wz", Number(tw.angular?.z||0));
+        } else if (p.topic === "/web/control_status") {
+          const s = p.msg.data || "unknown";
+          controlStatus.textContent = s;
+          if (s.includes("estop")) setSocketState("E-STOP", "danger");
+          else if (socket?.readyState === WebSocket.OPEN) setSocketState("Connected", "ok");
+        } else if (p.topic === "/web/data_collect/status") {
+          try { updateRecStatus(JSON.parse(p.msg.data || "{}")); } catch(_) {}
+        }
+      };
+      socket.onerror = () => log("WebSocket error");
+      socket.onclose = () => { stopTimers(); setSocketState("Disconnected", "offline"); log("Disconnected"); scheduleReconnect(); };
+    }
+
+    function disconnect() {
+      cancelReconnect();
+      stopTimers();
+      try { socket?.close(); } catch (_) {}
+      socket = null;
+      setSocketState("Disconnected", "offline");
+    }
+
+    // ── Touch joystick ────────────────────────────────────────────────────────
+    function updateJoystick(px, py) {
+      const r = joystick.getBoundingClientRect();
+      const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      const dx = px - cx, dy = py - cy;
+      const lim = r.width * 0.32, len = Math.hypot(dx, dy);
+      normalized.x = len > lim ? dx / len : dx / lim;
+      normalized.y = len > lim ? dy / len : dy / lim;
+      normalized.x = Math.max(-1, Math.min(1, normalized.x));
+      normalized.y = Math.max(-1, Math.min(1, normalized.y));
+      activeInputMode = "touch";
+      renderKnob(); updateCommandReadout(); publishCurrentCommand();
+    }
+
+    joystick.addEventListener("pointerdown", (e) => {
+      joystickActive = true; activeInputMode = "touch";
+      joystick.setPointerCapture(e.pointerId); updateJoystick(e.clientX, e.clientY);
+    });
+    joystick.addEventListener("pointermove", (e) => { if (joystickActive) updateJoystick(e.clientX, e.clientY); });
+    joystick.addEventListener("pointerup",     () => { joystickActive = false; publishStop(); });
+    joystick.addEventListener("pointercancel", () => { joystickActive = false; publishStop(); });
+
+    // ── Speed slider ──────────────────────────────────────────────────────────
+    speedSlider.addEventListener("input", () => {
+      speedMultiplier = parseInt(speedSlider.value, 10) / 100;
+      speedMultEl.textContent = `${speedMultiplier.toFixed(1)}×`;
+    });
+
+    // ── Button wiring ─────────────────────────────────────────────────────────
+    document.getElementById("connectBtn").addEventListener("click", connect);
+    document.getElementById("disconnectBtn").addEventListener("click", disconnect);
+    document.getElementById("stopBtn").addEventListener("click", () => { activeInputMode = "touch"; publishStop(); });
+    document.getElementById("estopBtn").addEventListener("click", () => publishEstop(true));
+    document.getElementById("clearEstopBtn").addEventListener("click", () => publishEstop(false));
+
+    window.addEventListener("gamepadconnected", (e) => {
+      gamepadIndex = e.gamepad.index;
+      setGamepadState("Ready", "ok", e.gamepad.id || `Gamepad ${e.gamepad.index}`);
+      log(`手柄已连接: ${e.gamepad.id || e.gamepad.index}`);
+    });
+    window.addEventListener("gamepaddisconnected", (e) => {
+      if (gamepadIndex === e.gamepad.index) gamepadIndex = null;
+      setGamepadState("Offline", "offline", "未检测到手柄");
+      log(`手柄已断开: ${e.gamepad.id || e.gamepad.index}`);
+    });
+
+    // ── Data Collection ────────────────────────────────────────────────────
+    const recStateEl    = document.getElementById("recState");
+    const recCountEl    = document.getElementById("recCount");
+    const recDurationEl = document.getElementById("recDuration");
+    const recRateEl     = document.getElementById("recRate");
+    const recFileEl     = document.getElementById("recFile");
+    const fileListEl    = document.getElementById("fileList");
+
+    function updateRecStatus(data) {
+      const s = data.state || "idle";
+      recStateEl.textContent = s;
+      recStateEl.className = "status-chip" + (s === "recording" ? " recording" : s === "processing" ? " processing" : " offline");
+      recCountEl.textContent  = data.count || 0;
+      recDurationEl.textContent = (data.duration || 0) + "s";
+      recRateEl.textContent   = (data.rate || "--") + " Hz";
+      recFileEl.textContent   = data.file || "--";
+    }
+
+    function sendRecCommand(cmd) {
+      const label = document.getElementById("recLabel").value.trim();
+      const payload = label && cmd === "start" ? cmd + ":" + label : cmd;
+      publish("/web/data_collect/command", { data: payload });
+      log("Data collect: " + payload);
+    }
+
+    function formatSize(bytes) {
+      if (bytes < 1024) return bytes + " B";
+      if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB";
+      return (bytes / 1048576).toFixed(1) + " MB";
+    }
+
+    function refreshFileList() {
+      const base = `http://${window.location.hostname || "127.0.0.1"}:${window.location.port || 8000}`;
+      fetch(base + "/api/data/list")
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (!data.files || data.files.length === 0) {
+            fileListEl.innerHTML = '<p class="muted">暂无 CSV 文件。</p>';
+            return;
+          }
+          fileListEl.innerHTML = data.files.map(function(f) {
+            return '<div class="file-row">' +
+              '<span class="fname">' + f.name + '</span>' +
+              '<span class="fmeta">' + formatSize(f.size) + '</span>' +
+              '<button class="primary" onclick="downloadFile(\'' + f.name + '\')">下载</button>' +
+              '</div>';
+          }).join("");
+        })
+        .catch(function(err) {
+          fileListEl.innerHTML = '<p class="muted">加载失败: ' + err.message + '</p>';
+        });
+    }
+
+    window.downloadFile = function(name) {
+      const base = `http://${window.location.hostname || "127.0.0.1"}:${window.location.port || 8000}`;
+      const a = document.createElement("a");
+      a.href = base + "/api/data/download/" + encodeURIComponent(name);
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    };
+
+    document.getElementById("recStartBtn").addEventListener("click", function() { sendRecCommand("start"); });
+    document.getElementById("recStopBtn").addEventListener("click", function() { sendRecCommand("stop"); });
+    document.getElementById("recRefreshBtn").addEventListener("click", refreshFileList);
+
+    // ── Rolling Charts ────────────────────────────────────────────────────────
+    const CHART_LEN = 200;
+    const chartVelCanvas = document.getElementById("chartVel");
+    const chartCurCanvas = document.getElementById("chartCur");
+    const velBuf = { vx: new Float32Array(CHART_LEN), vy: new Float32Array(CHART_LEN), wz: new Float32Array(CHART_LEN) };
+    const curBuf = { i0: new Float32Array(CHART_LEN), i1: new Float32Array(CHART_LEN), i2: new Float32Array(CHART_LEN) };
+
+    function pushSample(buf, key, val) {
+      const a = buf[key]; a.copyWithin(0, 1); a[a.length - 1] = val;
+    }
+
+    function drawChart(canvas, buf, colors, yRange) {
+      const ctx = canvas.getContext("2d");
+      const W = canvas.width = canvas.clientWidth * devicePixelRatio;
+      const H = canvas.height = canvas.clientHeight * devicePixelRatio;
+      ctx.clearRect(0, 0, W, H);
+      const keys = Object.keys(buf);
+      const [yMin, yMax] = yRange;
+      const ySpan = yMax - yMin || 1;
+      ctx.lineWidth = 1.5 * devicePixelRatio;
+      for (let k = 0; k < keys.length; k++) {
+        const arr = buf[keys[k]];
+        ctx.strokeStyle = colors[k];
+        ctx.beginPath();
+        for (let i = 0; i < arr.length; i++) {
+          const x = (i / (arr.length - 1)) * W;
+          const y = H - ((arr[i] - yMin) / ySpan) * H;
+          i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      }
+      // zero line
+      ctx.strokeStyle = "rgba(255,255,255,0.15)";
+      ctx.lineWidth = 1;
+      const zy = H - ((0 - yMin) / ySpan) * H;
+      ctx.beginPath(); ctx.moveTo(0, zy); ctx.lineTo(W, zy); ctx.stroke();
+    }
+
+    let chartTimer = null;
+    function startChartLoop() {
+      if (chartTimer) return;
+      chartTimer = setInterval(() => {
+        drawChart(chartVelCanvas, velBuf, ["#4fc3f7","#81c784","#ffb74d"], [-1.5, 1.5]);
+        drawChart(chartCurCanvas, curBuf, ["#e57373","#ba68c8","#fff176"], [-0.5, 3.0]);
+      }, 200);
+    }
+    startChartLoop();
+
+    // ── Boot ──────────────────────────────────────────────────────────────────
+    setGamepadState("Offline", "offline", "未检测到手柄");
+    updateTurboDisplay();
+    updateSpeedDisplay();
+    scheduleGamepadPolling();
+    renderKnob();
+    updateCommandReadout();
+  </script>
+</body>
+</html>

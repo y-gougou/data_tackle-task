@@ -1,0 +1,4 @@
+# 设置 Python 脚本在检出时保持可执行权限
+*.py text eol=lf
+scripts/*.py text eol=lf
+scripts/*.sh text eol=lf

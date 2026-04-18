@@ -1,0 +1,91 @@
+<launch>
+  <arg name="start_base" default="true"/>
+  <arg name="start_current_reader" default="true"/>
+  <arg name="start_data_collector" default="true"/>
+
+  <arg name="rosbridge_host" default="0.0.0.0"/>
+  <arg name="rosbridge_port" default="9090"/>
+
+  <arg name="web_host" default="0.0.0.0"/>
+  <arg name="web_port" default="8000"/>
+
+  <arg name="current_port" default="/dev/ttyUSB1"/>
+  <arg name="current_baud" default="115200"/>
+
+  <arg name="data_output_dir" default="/home/wheeltec/R550PLUS_data_collect/log"/>
+  <arg name="data_collect_rate" default="100"/>
+
+  <arg name="publish_rate" default="40.0"/>
+  <arg name="cmd_timeout" default="0.5"/>
+  <arg name="heartbeat_timeout" default="1.0"/>
+  <arg name="max_linear_x" default="1.50"/>
+  <arg name="max_linear_y" default="1.00"/>
+  <arg name="max_angular_z" default="3.75"/>
+  <arg name="linear_deadband" default="0.02"/>
+  <arg name="angular_deadband" default="0.03"/>
+  <arg name="response_exponent" default="0.70"/>
+  <arg name="min_linear_ratio" default="0.20"/>
+  <arg name="min_lateral_ratio" default="0.15"/>
+  <arg name="min_angular_ratio" default="0.24"/>
+
+  <include file="$(find turn_on_wheeltec_robot)/launch/include/base_serial.launch" if="$(arg start_base)"/>
+
+  <node if="$(arg start_current_reader)"
+        name="current_reader"
+        pkg="turn_on_wheeltec_robot"
+        type="current_reader.py"
+        output="screen">
+    <param name="port" value="$(arg current_port)"/>
+    <param name="baud" value="$(arg current_baud)"/>
+  </node>
+
+  <node name="web_cmd_vel_adapter"
+        pkg="turn_on_wheeltec_robot"
+        type="cmd_vel_web_adapter.py"
+        output="screen">
+    <param name="input_topic" value="/cmd_vel_web"/>
+    <param name="output_topic" value="/cmd_vel"/>
+    <param name="heartbeat_topic" value="/web/heartbeat"/>
+    <param name="estop_topic" value="/web/estop"/>
+    <param name="status_topic" value="/web/control_status"/>
+    <param name="publish_rate" value="$(arg publish_rate)"/>
+    <param name="cmd_timeout" value="$(arg cmd_timeout)"/>
+    <param name="heartbeat_timeout" value="$(arg heartbeat_timeout)"/>
+    <param name="max_linear_x" value="$(arg max_linear_x)"/>
+    <param name="max_linear_y" value="$(arg max_linear_y)"/>
+    <param name="max_angular_z" value="$(arg max_angular_z)"/>
+    <param name="linear_deadband" value="$(arg linear_deadband)"/>
+    <param name="angular_deadband" value="$(arg angular_deadband)"/>
+    <param name="response_exponent" value="$(arg response_exponent)"/>
+    <param name="min_linear_ratio" value="$(arg min_linear_ratio)"/>
+    <param name="min_lateral_ratio" value="$(arg min_lateral_ratio)"/>
+    <param name="min_angular_ratio" value="$(arg min_angular_ratio)"/>
+  </node>
+
+  <node name="rosbridge_websocket"
+        pkg="rosbridge_server"
+        type="rosbridge_websocket"
+        output="screen">
+    <param name="address" value="$(arg rosbridge_host)"/>
+    <param name="port" value="$(arg rosbridge_port)"/>
+  </node>
+
+  <node name="web_dashboard_server"
+        pkg="turn_on_wheeltec_robot"
+        type="web_dashboard_server.py"
+        output="screen">
+    <param name="host" value="$(arg web_host)"/>
+    <param name="port" value="$(arg web_port)"/>
+    <param name="data_dir" value="$(arg data_output_dir)"/>
+  </node>
+
+  <node if="$(arg start_data_collector)"
+        name="data_collector"
+        pkg="turn_on_wheeltec_robot"
+        type="data_collector.py"
+        output="screen">
+    <param name="output_dir" value="$(arg data_output_dir)"/>
+    <param name="rate" value="$(arg data_collect_rate)"/>
+    <param name="auto_start" value="false"/>
+  </node>
+</launch>

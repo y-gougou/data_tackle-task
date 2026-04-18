@@ -1,0 +1,446 @@
+<launch>
+  <!-- Arguments参数 -->
+  <arg name="car_mode"  default="" />
+  <arg name="if_voice" default="false"/>
+  
+  <!-- 用于robot_state_publisher节点-->
+  <node pkg="tf" type="static_transform_publisher" name="base_to_link" args="0 0 07258 0 0 0 base_footprint base_link 100" />
+  <!--是用相应的车型要修改成下面相应的z轴参数：(r3s_mec,0.02027), (r3s_4wd,0.01463), (s300_mini,0.03949), (s300_yw,0.03342), (brushless_senior_diff,0.07348), (S100_diff,0.0277), (mini_tank_moveit_four,0.02631), (mini_mec_moveit_four,0.07258), (mini_4wd_moveit_four,0.06753), (mini_mec_moveit_six,0.07275), (top_mec_EightDrive,0.03553), (top_akm_bs,0.049), (top_mec_bs,0.05274), (top_4wd_bs,0.08786), (top_omni,0.0192), (top_akm_dl,0.11744), (top_mec_dl,0.03802), (top_4wd_dl,0.07454), (mini_akm,0.0216), (mini_diff,0.01563), (mini_tank,0.03715), (mini_mec,0.07258), (mini_omni,0.06542), (mini_4wd,0.0682), (senior_akm,0.03826), (senior_mec_bs,0.02391), (senior_4wd_bs,0.04994), (senior_omni,0.09016), (senior_mec_dl,0.05882), (senior_4wd_dl,0.05823), (senior_diff,0.0374), (flagship_mec_bs,0.11274), (four_wheel_diff_bs,0.14153), (flagship_4wd_bs,0.14917), (flagship_mec_dl,0.03816), (four_wheel_diff_dl,0.06887), (flagship_4wd_dl_robot,0.07384) -->
+  
+  <!--坐标变换，需要实测 -->
+  <!--阿克曼系列 -->
+  <!-- car_mode and tf  mini_akm-->
+  <group if="$(eval car_mode == 'mini_akm')">
+   <!-- 用于雷达节点，后面同理不再赘述-->
+   <node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.05134 0.00 0.09452 3.14 0 0  base_footprint laser 100" />
+   <!-- 用于摄像头相关节点，如3d建图导航，后面同理不再赘述-->
+   <node pkg="tf" type="static_transform_publisher" name="base_to_camera" args="0.11365 0.00017 0.0762 0 0 0   base_footprint camera_link 100" />
+   <!-- 用于robot_pose_ekf节点，后面同理不再赘述-->
+   <node pkg="tf" type="static_transform_publisher" name="base_to_gyro" args="0 0 0 0 0 0 base_footprint gyro_link 100" />
+  </group>
+  <!-- car_mode and tf  senior_akm-->
+  <group if="$(eval car_mode == 'senior_akm')">
+   <node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.08874 0.00067 0.11102 3.14 0 0  base_footprint laser 100" />
+   <node pkg="tf" type="static_transform_publisher" name="base_to_camera" args="0.16578 0.00095 0.0897 0 0 0   base_footprint camera_link 100" />
+   <node pkg="tf" type="static_transform_publisher" name="base_to_gyro" args="0 0 0 0 0 0 base_footprint gyro_link 100" />
+  </group>
+  <!-- car_mode and tf  top_akm_bs-->
+  <group if="$(eval car_mode == 'top_akm_bs')">
+   <node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.23979 0.00017 0.15302 3.14 0 0  base_footprint laser 100" />
+   <node pkg="tf" type="static_transform_publisher" name="base_to_camera" args="0.3124 0.00004 0.1347 0 0 0   base_footprint camera_link 100" />
+   <node pkg="tf" type="static_transform_publisher" name="base_to_gyro" args="0 0 0 0 0 0 base_footprint gyro_link 100" />
+  </group>
+  <!-- car_mode and tf  top_akm_dl-->
+  <group if="$(eval car_mode == 'top_akm_dl')">
+   <node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.25033 0.00182 0.1504 3.14 0 0  base_footprint laser 100" />
+   <node pkg="tf" type="static_transform_publisher" name="base_to_camera" args="0.32039 0.00164 0.13208 0 0 0   base_footprint camera_link 100" />
+   <node pkg="tf" type="static_transform_publisher" name="base_to_gyro" args="0 0 0 0 0 0 base_footprint gyro_link 100" />
+  </group>
+  <!-- car_mode and tf  V550_akm-->
+  <group if="$(eval car_mode == 'V550_akm')">
+      <node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.08348 0.00 0.09655 3.14 0 0  base_footprint laser 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_camera" args="0.0016 0.00 0.15214 0 0 0   base_footprint camera_link 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_gyro" args="0 0 0 0 0 0 base_footprint gyro_link 100" />
+  </group>
+
+  <!--麦轮系列 -->
+  <!-- car_mode and tf  mini_mec-->
+  <group if="$(eval car_mode == 'mini_mec')">
+      <!-- 用于雷达节点，后面同理不再赘述-->
+      <node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.03163 0.00009 0.09502 3.14 0 0  base_footprint laser 100" />
+      <!-- 用于摄像头相关节点，如3d建图导航，后面同理不再赘述-->
+      <node pkg="tf" type="static_transform_publisher" name="base_to_camera" args="0.10709 0.00032 0.0762 0 0 0   base_footprint camera_link 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_gyro" args="0 0 0 0 0 0 base_footprint gyro_link 100" />
+  </group>
+  <!-- car_mode and tf  mini_mec_moveit_four-->
+  <group if="$(eval car_mode == 'mini_mec_moveit_four')">
+      <!-- 用于雷达节点，后面同理不再赘述-->
+      <!--node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.0904 0.00009 0.01102 3.14 0 0  base_footprint laser 100" /--> <!--A2 laser-->
+      <node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.0904 0.00009 0.01102 3.14 0 0  base_footprint laser 100" /> <!--A1 laser-->
+      <!-- 用于摄像头相关节点，如3d建图导航，后面同理不再赘述-->
+      <node pkg="tf" type="static_transform_publisher" name="base_to_camera" args="-0.10713 0 0.46504 0 0 0   base_footprint camera_link 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_gyro" args="0 0 0 0 0 0 base_footprint gyro_link 100" />
+  </group>
+    <group if="$(eval car_mode == 'mini_mec_moveit_six')">
+      <!-- 用于雷达节点，后面同理不再赘述-->
+      <!--node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.10608 0.00075 0.01602 0 0  base_footprint laser 100" /--> <!--A2 laser-->
+      <node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.10608 0.00075 0.01602 3.14 0 0  base_footprint laser 100" /> <!--A1 laser-->
+      <!-- 用于摄像头相关节点，如3d建图导航，后面同理不再赘述-->
+      <node pkg="tf" type="static_transform_publisher" name="base_to_camera" args="-0.11427 0.0008 0.48125 0 0 0   base_footprint camera_link 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_gyro" args="0 0 0 0 0 0 base_footprint gyro_link 100" />
+  </group>
+  <!-- car_mode and tf  senior_mec_bs-->
+  <group if="$(eval car_mode == 'senior_mec_bs')">
+      <node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.09113 0.00067 0.11102 3.14 0 0  base_footprint laser 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_camera" args="0.16083 0.00075 0.0897 0 0 0   base_footprint camera_link 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_gyro" args="0 0 0 0 0 0 base_footprint gyro_link 100" />
+  </group>
+  <!-- car_mode and tf  senior_mec_dl-->
+  <group if="$(eval car_mode == 'senior_mec_dl')">
+      <node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.15699 0.00002 0.14652 3.14 0 0  base_footprint laser 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_camera" args="0.2316 0.00025 0.1282 0 0 0   base_footprint camera_link 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_gyro" args="0 0 0 0 0 0 base_footprint gyro_link 100" />
+  </group>
+  <!-- car_mode and tf  top_mec_bs-->
+  <group if="$(eval car_mode == 'top_mec_bs')">
+      <node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.13865 0.00002 0.12652 3.14 0 0  base_footprint laser 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_camera" args="0.2089 0.00025 0.1082 0 0 0   base_footprint camera_link 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_gyro" args="0 0 0 0 0 0 base_footprint gyro_link 100" />
+  </group>
+  <!-- car_mode and tf  top_mec_dl-->
+  <group if="$(eval car_mode == 'top_mec_dl')">
+      <node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.14499 0.00002 0.18652 3.14 0 0  base_footprint laser 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_camera" args="0.2286 0.0003 0.1682 0 0 0   base_footprint camera_link 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_gyro" args="0 0 0 0 0 0 base_footprint gyro_link 100" />
+  </group>
+  <!-- car_mode and tf  senior_mec_EightDrive-->
+  <group if="$(eval car_mode == 'senior_mec_EightDrive')">
+      <node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.26 0.00 0.23 3.14 0 0  base_footprint laser 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_camera" args="0.320 0 0.18 0 0 0   base_footprint camera_link 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_gyro" args="0 0 0 0 0 0 base_footprint gyro_link 100" />
+  </group>
+  <!-- car_mode and tf  top_mec_EightDrive-->
+  <group if="$(eval car_mode == 'top_mec_EightDrive')">
+      <node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.26583 0.00018 0.19506 3.14 0 0  base_footprint laser 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_camera" args="0.33962 0.00005 0.1697 0 0 0   base_footprint camera_link 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_gyro" args="0 0 0 0 0 0 base_footprint gyro_link 100" />
+  </group>
+
+  <!-- car_mode and tf  flagship_mec_dl-->
+  <group if="$(eval car_mode == 'flagship_mec_dl')">
+      <node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.23835 0.00002 0.28466 3.14 0 0  base_footprint laser 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_camera" args="0.29014 0.00024 0.2122 0 0 0   base_footprint camera_link 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_gyro" args="0 0 0 0 0 0 base_footprint gyro_link 100" />
+  </group>
+
+  <!-- car_mode and tf  flagship_mec_bs-->
+  <group if="$(eval car_mode == 'flagship_mec_bs')">
+      <node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.24699 0.00002 0.24466 3.14 0 0  base_footprint laser 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_camera" args="0.29879 0.00024 0.1722 0 0 0   base_footprint camera_link 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_gyro" args="0 0 0 0 0 0 base_footprint gyro_link 100" />
+  </group>
+
+ <!--全向轮系列 -->
+ <!-- car_mode and tf  mini_omni-->
+ <group if="$(eval car_mode == 'mini_omni')">
+      <node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.0051 0.00009 0.09752 3.14 0 0  base_footprint laser 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_camera" args="0.0857 0.00016 0.0762 0 0 0   base_footprint camera_link 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_gyro" args="0 0 0 0 0 0 base_footprint gyro_link 100" />
+  </group>
+  <!-- car_mode and tf  senior_omni-->
+  <group if="$(eval car_mode == 'senior_omni')">
+      <node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.06719 0.0001 0.12802 3.14 0 0  base_footprint laser 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_camera" args="0.15548 0.00012 0.1097 0 0 0   base_footprint camera_link 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_gyro" args="0 0 0 0 0 0 base_footprint gyro_link 100" />
+  </group>
+  <!-- car_mode and tf  top_omni-->
+  <group if="$(eval car_mode == 'top_omni')">
+      <node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.144 0.00018 0.13806 3.14 0 0  base_footprint laser 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_camera" args="0.21733 0.00026 0.1127 0 0 0   base_footprint camera_link 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_gyro" args="0 0 0 0 0 0 base_footprint gyro_link 100" />
+  </group>
+
+  <!--四驱系列 -->
+ <!-- car_mode and tf  mini_4wd-->
+  <group if="$(eval car_mode == 'mini_4wd')">
+      <node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.03163 0.00009 0.09292 3.14 0 0  base_link laser 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_camera" args="0.10709 0.00032 0.0767 0 0 0   base_link camera_link 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_gyro" args="0 0 0 0 0 0 base_footprint gyro_link 100" />
+  </group>
+    <!-- car_mode and tf  mini_4wd_moveit_four-->
+  <group if="$(eval car_mode == 'mini_4wd_moveit_four')">
+      <!-- 用于雷达节点，后面同理不再赘述-->
+      <!--node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.0904 0.00009 0.01102 3.14 0 0  base_footprint laser 100" /--> <!--A2 laser-->
+      <node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.0904 0.00009 0.01102 3.14 0 0  base_footprint laser 100" /> <!--A1 laser-->
+      <!-- 用于摄像头相关节点，如3d建图导航，后面同理不再赘述-->
+      <node pkg="tf" type="static_transform_publisher" name="base_to_camera" args="-0.10713 0 0.46504 0 0 0   base_footprint camera_link 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_gyro" args="0 0 0 0 0 0 base_footprint gyro_link 100" />
+  </group>
+  <!-- car_mode and tf  mini_4wd_moveit_six-->
+  <group if="$(eval car_mode == 'mini_4wd_moveit_six')">
+      <!-- 用于雷达节点，后面同理不再赘述-->
+      <!--node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.048 0.00 0.18 3.925 0 0  base_footprint laser 100" /--> <!--A2 laser-->
+      <node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.048 0.00 0.18 3.14 0 0  base_footprint laser 100" /> <!--A1 laser-->
+      <!-- 用于摄像头相关节点，如3d建图导航，后面同理不再赘述-->
+      <node pkg="tf" type="static_transform_publisher" name="base_to_camera" args="-0.118 0 0.50 0 0 0   base_footprint camera_link 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_gyro" args="0 0 0 0 0 0 base_footprint gyro_link 100" />
+  </group>
+
+  <!-- car_mode and tf  senior_4wd_dl-->
+  <group if="$(eval car_mode == 'senior_4wd_dl')">
+      <node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.15699 0.00201 0.14652 3.14 0 0  base_footprint laser 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_camera" args="0.2316 0.00224 0.1282 0 0 0   base_footprint camera_link 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_gyro" args="0 0 0 0 0 0 base_footprint gyro_link 100" />
+  </group>
+  <!-- car_mode and tf  top_4wd_bs-->
+  <group if="$(eval car_mode == 'top_4wd_bs')">
+      <node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.13856 0.00002 0.12652 3.14 0 0  base_footprint laser 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_camera" args="0.2089 0.00025 0.1082 0 0 0   base_footprint camera_link 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_gyro" args="0 0 0 0 0 0 base_footprint gyro_link 100" />
+  </group>
+  <!-- car_mode and tf  top_4wd_dl-->
+  <group if="$(eval car_mode == 'top_4wd_dl')">
+      <node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.14499 0.00002 0.18652 3.14 0 0  base_footprint laser 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_camera" args="0.2286 0.0003 0.1682 0 0 0   base_footprint camera_link 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_gyro" args="0 0 0 0 0 0 base_footprint gyro_link 100" />
+  </group>
+<!-- car_mode and tf  flagship_4wd_bs-->
+  <group if="$(eval car_mode == 'flagship_4wd_bs')">
+      <node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.24699 0.00002 0.24466 3.14 0 0  base_footprint laser 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_camera" args="0.29879 0.00024 0.1722 0 0 0   base_footprint camera_link 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_gyro" args="0 0 0 0 0 0 base_footprint gyro_link 100" />
+  </group>
+  <!-- car_mode and tf  flagship_4wd_dl-->
+  <group if="$(eval car_mode == 'flagship_4wd_dl')">
+      <node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.23835 0.00002 0.28466 3.14 0 0  base_footprint laser 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_camera" args="0.29014 0.00024 0.2122 0 0 0   base_footprint camera_link 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_gyro" args="0 0 0 0 0 0 base_footprint gyro_link 100" />
+  </group>
+  
+  <!--差速系列 -->
+  <!-- car_mode and tf  mini_tank_moveit_four-->
+  <group if="$(eval car_mode == 'mini_tank_moveit_four')">
+      <!-- 用于雷达节点，后面同理不再赘述-->
+      <!--node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.07324 0.00001 0.07817 3.14 0 0  base_footprint laser 100" /--> <!--A2 laser-->
+      <node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.07324 0.00001 0.07817 3.14 0 0  base_footprint laser 100" /> <!--A1 laser-->
+      <!-- 用于摄像头相关节点，如3d建图导航，后面同理不再赘述-->
+      <node pkg="tf" type="static_transform_publisher" name="base_to_camera" args="-0.08538 0 0.45704 0 0 0   base_footprint camera_link 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_gyro" args="0 0 0 0 0 0 base_footprint gyro_link 100" />
+  </group>
+  <!-- car_mode and tf  mini_diff-->
+  <group if="$(eval car_mode == 'mini_diff')">
+      <node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.05134 0.00 0.09452 3.14 0 0  base_footprint laser 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_camera" args="0.11365 0.00017 0.0762 0 0 0   base_footprint camera_link 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_gyro" args="0 0 0 0 0 0 base_footprint gyro_link 100" />
+  </group>
+   
+
+  <!-- car_mode and tf  senior_diff-->
+  <group if="$(eval car_mode == 'senior_diff')">
+      <node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.05911 0.00016 0.13416 3.14 0 0  base_footprint laser 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_camera" args="0.16614 0.00023 0.1087 0 0 0   base_footprint camera_link 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_gyro" args="0 0 0 0 0 0 base_footprint gyro_link 100" />
+  </group>
+  <!-- car_mode and tf  four_wheel_diff_bs-->
+  <group if="$(eval car_mode == 'four_wheel_diff_bs')">
+      <node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.24699 0.00002 0.24466 3.14 0 0  base_footprint laser 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_camera" args="0.29879 0.00024 0.1722 0 0 0   base_footprint camera_link 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_gyro" args="0 0 0 0 0 0 base_footprint gyro_link 100" />
+  </group>
+  <!-- car_mode and tf  four_wheel_diff_dl-->
+  <group if="$(eval car_mode == 'four_wheel_diff_dl')">
+      <node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.23835 0.00002 0.28466 3.14 0 0  base_footprint laser 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_camera" args="0.29014 0.00024 0.2122 0 0 0   base_footprint camera_link 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_gyro" args="0 0 0 0 0 0 base_footprint gyro_link 100" />
+  </group>
+  <!-- car_mode and tf  flagship_four_wheel_diff_dl-->
+  <group if="$(eval car_mode == 'flagship_four_wheel_diff_dl')">
+      <node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="-0.05 0.00 0.36 3.14 0 0  base_footprint laser 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_camera" args="0.01 0.00 0.31 0 0 0   base_footprint camera_link 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_gyro" args="0 0 0 0 0 0 base_footprint gyro_link 100" />
+  </group>
+  <!-- car_mode and tf  flagship_four_wheel_diff_bs-->
+  <group if="$(eval car_mode == 'flagship_four_wheel_diff_bs')">
+      <node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="-0.05 0.00 0.36 3.14 0 0  base_footprint laser 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_camera" args="0.01 0.00 0.31 0 0 0   base_footprint camera_link 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_gyro" args="0 0 0 0 0 0 base_footprint gyro_link 100" />
+  </group>
+  <!-- car_mode and tf  brushless_senior_diff-->
+  <group if="$(eval car_mode == 'brushless_senior_diff')">
+      <node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.10115 0.00 0.23618 3.14 0 0  base_footprint laser 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_camera" args="0.19024 0.00024 0.22022 0 0 0   base_footprint camera_link 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_gyro" args="0 0 0 0 0 0 base_footprint gyro_link 100" />
+  </group>
+  <!-- car_mode and tf  s300_mini-->
+  <group if="$(eval car_mode == 's300_mini')">
+      <node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.215 0.175 0.12162 3.14 0 0  base_link laser 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_laser2" args="-0.215 -0.175 0.12162 3.14 0 0  base_link laser_link 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_camera" args="0.25402 0.00008 0.1975 0 0 0   base_link camera_link 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_gyro" args="0 0 0 0 0 0 base_footprint gyro_link 100" />
+  </group>
+
+  <!-- car_mode and tf  s300_yw-->
+  <group if="$(eval car_mode == 's300_yw')">
+      <node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.3 0.235 0.12202 3.14 0 0  base_link laser 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_laser2" args="-0.3 -0.235 0.12202 3.14 0 0  base_link laser_link 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_camera" args="0.3418 0.00002 0.1953 0 0 0   base_link camera_link 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_gyro" args="0 0 0 0 0 0 base_footprint gyro_link 100" />
+  </group>
+
+  <!-- car_mode and tf  r3s_mec-->
+  <group if="$(eval car_mode == 'r3s_mec')">
+      <node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.08348 0.00 0.09655 3.14 0 0  base_footprint laser 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_camera" args="0.0016 0.00 0.15214 0 0 0   base_footprint camera_link 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_gyro" args="0 0 0 0 0 0 base_footprint gyro_link 100" />
+  </group>
+  <!-- car_mode and tf  r3S_4wd-->
+  <group if="$(eval car_mode == 'r3S_4wd')">
+      <node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.08348 0.00 0.09655 3.14 0 0  base_footprint laser 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_camera" args="0.0016 0.00 0.15214 0 0 0   base_footprint camera_link 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_gyro" args="0 0 0 0 0 0 base_footprint gyro_link 100" />
+  </group>
+  <!-- car_mode and tf  mini_tank-->
+  <group if="$(eval car_mode == 'mini_tank')">
+      <node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.02799 0.00005 0.09602 3.14 0 0  base_footprint laser 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_camera" args="0.09673 0.00012 0.0777 0 0 0   base_footprint camera_link 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_gyro" args="0 0 0 0 0 0 base_footprint gyro_link 100" />
+  </group>
+
+<!-- car_mode and tf  senior_4wd_bs-->
+  <group if="$(eval car_mode == 'senior_4wd_bs')">
+      <node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.09113 0.00067 0.11102 0 0 0  base_footprint laser_link 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_camera" args="0.16083 0.00075 0.0897 0 0 0   base_footprint camera_link 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_gyro" args="0 0 0 0 0 0 base_footprint gyro_link 100" />
+  </group>
+
+  <!-- car_mode and tf  S100_diff-->
+  <group if="$(eval car_mode == 'S100_diff')">
+      <node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.1562 0.00 0.11843 3.14 0 0  base_footprint laser 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_camera" args="0.16816 0.0008 0.1867 0 0 0   base_footprint camera_link 100" />
+      <node pkg="tf" type="static_transform_publisher" name="base_to_gyro" args="0 0 0 0 0 0 base_footprint gyro_link 100" />
+  </group>
+
+  <!-- URDF 标准化机器人描述格式 -->
+  <!--阿克曼系列 -->
+  <group if="$(eval car_mode == 'mini_akm')">
+      <param name = "robot_description" textfile = "$(find turn_on_wheeltec_robot)/urdf/mini_akm_robot.urdf"/> 
+  </group>
+  <group if="$(eval car_mode == 'senior_akm')">
+      <param name = "robot_description" textfile = "$(find turn_on_wheeltec_robot)/urdf/senior_akm_robot.urdf"/> 
+  </group>
+  <group if="$(eval car_mode == 'top_akm_bs')">
+      <param name = "robot_description" textfile = "$(find turn_on_wheeltec_robot)/urdf/top_akm_bs_robot.urdf"/> 
+  </group>
+  <group if="$(eval car_mode == 'top_akm_dl')">
+      <param name = "robot_description" textfile = "$(find turn_on_wheeltec_robot)/urdf/top_akm_dl_robot.urdf"/> 
+  </group>
+  <group if="$(eval car_mode == 'V550_akm')">
+      <param name = "robot_description" textfile = "$(find turn_on_wheeltec_robot)/urdf/v550_robot_ack_description.urdf"/> 
+  </group>
+
+  <!--麦轮系列 -->
+  <group if="$(eval car_mode == 'mini_mec')">
+      <param name = "robot_description" textfile = "$(find turn_on_wheeltec_robot)/urdf/mini_mec_robot.urdf"/> 
+  </group>
+  <group if="$(eval car_mode == 'mini_mec_moveit_four' and if_voice==false)">
+      <param name = "robot_description" textfile = "$(find turn_on_wheeltec_robot)/urdf/mini_mec_moveit_four.urdf"/> 
+  </group>
+   <group if="$(eval car_mode == 'mini_mec_moveit_six' and if_voice==false)">
+      <param name = "robot_description" textfile = "$(find turn_on_wheeltec_robot)/urdf/mini_mec_moveit_six.urdf"/> 
+  </group>
+  <group if="$(eval car_mode == 'senior_mec_bs')">
+      <param name = "robot_description" textfile = "$(find turn_on_wheeltec_robot)/urdf/senior_mec_bs_robot.urdf"/> 
+  </group>
+  <group if="$(eval car_mode == 'senior_mec_dl')">
+      <param name = "robot_description" textfile = "$(find turn_on_wheeltec_robot)/urdf/senior_mec_dl_robot.urdf"/> 
+  </group>
+  <group if="$(eval car_mode == 'top_mec_bs')">
+      <param name = "robot_description" textfile = "$(find turn_on_wheeltec_robot)/urdf/top_mec_bs_robot.urdf"/> 
+  </group>
+  <group if="$(eval car_mode == 'top_mec_dl')">
+      <param name = "robot_description" textfile = "$(find turn_on_wheeltec_robot)/urdf/top_mec_dl_robot.urdf"/> 
+  </group>
+  <group if="$(eval car_mode == 'senior_mec_EightDrive' or car_mode == 'top_mec_EightDrive')">
+      <param name = "robot_description" textfile = "$(find turn_on_wheeltec_robot)/urdf/top_mec_EightDrive_robot.urdf"/> 
+  </group>
+  <group if="$(eval car_mode == 'flagship_mec_dl')">
+      <param name = "robot_description" textfile = "$(find turn_on_wheeltec_robot)/urdf/flagship_mec_dl_robot.urdf"/> 
+  </group>
+  <group if="$(eval car_mode == 'flagship_mec_bs')">
+      <param name = "robot_description" textfile = "$(find turn_on_wheeltec_robot)/urdf/flagship_mec_bs_robot.urdf"/> 
+  </group>
+
+  <!--全向轮系列 -->
+  <group if="$(eval car_mode == 'mini_omni')">
+      <param name = "robot_description" textfile = "$(find turn_on_wheeltec_robot)/urdf/mini_omni_robot.urdf"/> 
+  </group>
+  <group if="$(eval car_mode == 'senior_omni')">
+      <param name = "robot_description" textfile = "$(find turn_on_wheeltec_robot)/urdf/senior_omni_robot.urdf"/> 
+  </group>
+  <group if="$(eval car_mode == 'top_omni')">
+      <param name = "robot_description" textfile = "$(find turn_on_wheeltec_robot)/urdf/top_omni_robot.urdf"/> 
+  </group>
+
+  <!--四驱系列 -->
+  <group if="$(eval car_mode == 'mini_4wd')">
+      <param name = "robot_description" textfile = "$(find turn_on_wheeltec_robot)/urdf/mini_4wd_robot.urdf"/> 
+  </group>
+  <group if="$(eval car_mode == 'mini_4wd_moveit_four' and if_voice==false)">
+      <param name = "robot_description" textfile = "$(find turn_on_wheeltec_robot)/urdf/mini_4wd_moveit_four.urdf"/> 
+  </group>
+  <group if="$(eval car_mode == 'mini_4wd_moveit_six' and if_voice==false)">
+      <param name = "robot_description" textfile = "$(find turn_on_wheeltec_robot)/urdf/mini_4wd_moveit_six.urdf"/> 
+  </group>
+  <group if="$(eval car_mode == 'senior_4wd_bs')">
+      <param name = "robot_description" textfile = "$(find turn_on_wheeltec_robot)/urdf/senior_4wd_bs_robot.urdf"/> 
+  </group>
+  <group if="$(eval car_mode == 'senior_4wd_dl')">
+      <param name = "robot_description" textfile = "$(find turn_on_wheeltec_robot)/urdf/senior_4wd_dl_robot.urdf"/> 
+  </group>
+  <group if="$(eval car_mode == 'top_4wd_bs')">
+      <param name = "robot_description" textfile = "$(find turn_on_wheeltec_robot)/urdf/top_4wd_bs_robot.urdf"/> 
+  </group>
+  <group if="$(eval car_mode == 'top_4wd_dl')">
+      <param name = "robot_description" textfile = "$(find turn_on_wheeltec_robot)/urdf/top_4wd_dl_robot.urdf"/> 
+  </group>
+  <group if="$(eval car_mode == 'flagship_4wd_bs')">
+      <param name = "robot_description" textfile = "$(find turn_on_wheeltec_robot)/urdf/flagship_4wd_bs_robot.urdf"/> 
+  </group>
+  <group if="$(eval car_mode == 'flagship_4wd_dl')">
+      <param name = "robot_description" textfile = "$(find turn_on_wheeltec_robot)/urdf/flagship_4wd_dl_robot.urdf"/> 
+  </group>
+
+  <!--差速系列 -->
+  <group if="$(eval car_mode == 'mini_tank_moveit_four' and if_voice==false)">
+      <param name = "robot_description" textfile = "$(find turn_on_wheeltec_robot)/urdf/mini_tank_moveit_four.urdf"/> 
+  </group>
+  <group if="$(eval car_mode == 'mini_diff')">
+      <param name = "robot_description" textfile = "$(find turn_on_wheeltec_robot)/urdf/mini_diff_robot.urdf"/> 
+  </group>
+  <group if="$(eval car_mode == 'senior_diff')">
+      <param name = "robot_description" textfile = "$(find turn_on_wheeltec_robot)/urdf/senior_diff_robot.urdf"/> 
+  </group>
+  <group if="$(eval car_mode == 'four_wheel_diff_bs')">
+      <param name = "robot_description" textfile = "$(find turn_on_wheeltec_robot)/urdf/four_wheel_diff_bs_robot.urdf"/> 
+  </group>
+  <group if="$(eval car_mode == 'four_wheel_diff_dl')">
+      <param name = "robot_description" textfile = "$(find turn_on_wheeltec_robot)/urdf/four_wheel_diff_dl_robot.urdf"/> 
+  </group>
+  <group if="$(eval car_mode == 'flagship_four_wheel_diff_dl')">
+      <param name = "robot_description" textfile = "$(find turn_on_wheeltec_robot)/urdf/flagship_four_wheel_diff_dl_robot.urdf"/>
+  </group>
+  <group if="$(eval car_mode == 'flagship_four_wheel_diff_bs')">
+      <param name = "robot_description" textfile = "$(find turn_on_wheeltec_robot)/urdf/flagship_four_wheel_diff_bs_robot.urdf"/>
+  </group>
+  <group if="$(eval car_mode == 'brushless_senior_diff')">
+      <param name = "robot_description" textfile = "$(find turn_on_wheeltec_robot)/urdf/brushless_senior_diff.urdf"/> 
+  </group>
+
+  <!--S车型系列 -->
+  <group if="$(eval car_mode == 's300_mini')">
+      <param name = "robot_description" textfile = "$(find turn_on_wheeltec_robot)/urdf/s300_mini_robot.urdf"/> 
+  </group>  
+  <group if="$(eval car_mode == 's300_yw')">
+      <param name = "robot_description" textfile = "$(find turn_on_wheeltec_robot)/urdf/s300_yw_robot.urdf"/> 
+  </group>  
+  <group if="$(eval car_mode == 'r3s_mec')">
+      <param name = "robot_description" textfile = "$(find turn_on_wheeltec_robot)/urdf/r3s_mec_robot.urdf"/> 
+  </group>
+  <group if="$(eval car_mode == 'r3S_4wd')">
+      <param name = "robot_description" textfile = "$(find turn_on_wheeltec_robot)/urdf/r3S_4wd_robot.urdf"/> 
+  </group>
+  <group if="$(eval car_mode == 'mini_tank')">
+      <param name = "robot_description" textfile = "$(find turn_on_wheeltec_robot)/urdf/mini_tank_robot.urdf"/> 
+  </group>
+  <group if="$(eval car_mode == 'S100_diff')">
+      <param name = "robot_description" textfile = "$(find turn_on_wheeltec_robot)/urdf/S100_diff_robot.urdf"/> 
+  </group>
+
+  <!-- 读取urdf信息(robot_description) 发布话题：/joint_states-->
+  <node unless="$(eval (car_mode=='mini_mec_moveit_six' or car_mode=='mini_4wd_moveit_six') and if_voice==true)" name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher" />
+  <!-- 订阅话题：/joint_states，发布小车TF信息-->
+  <node unless="$(eval (car_mode=='mini_mec_moveit_six' or car_mode=='mini_4wd_moveit_six') and if_voice==true)" name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" />
+
+ </launch>
+
+

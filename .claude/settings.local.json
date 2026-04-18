@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/ypp/Desktop/ROS小车资料/5.R550PLUS_C50C_大车全向轮运动底盘源码/WHEELTEC_C50X_2025.10.17/WHEETEC_C50X_2025.10.17/BALANCE/**)",
+      "Read(//c/Users/ypp/Desktop/ROS小车资料/5.R550PLUS_C50C_大车全向轮运动底盘源码/WHEELTEC_C50X_2025.10.17/WHEETEC_C50X_2025.10.17/**)",
+      "Bash(xargs wc *)"
+    ]
+  }
+}

@@ -1,0 +1,16 @@
+# Python caches
+__pycache__/
+*.py[cod]
+
+# Local temporary files
+codex_write_test.tmp
+
+# Local archive packages
+*.7z
+
+# Common ROS/Python local outputs
+.pytest_cache/
+build/
+devel/
+install/
+log/
