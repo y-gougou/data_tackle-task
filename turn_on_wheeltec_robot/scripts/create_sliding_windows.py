@@ -9,9 +9,9 @@ create_sliding_windows.py - 滑动窗口分割模块
 3. 划分训练集和测试集（时序划分：80%训练，20%测试）
 4. 保存为numpy数组
 
-滑动窗口参数：
-  窗口长度：100点 = 1秒 @ 100Hz
-  步长：50点 = 0.5秒
+滑动窗口参数（@ 20Hz）：
+  窗口长度：100点 = 5秒
+  步长：50点 = 2.5秒
   重叠率：50%
 
 使用方法：
@@ -38,9 +38,9 @@ class SlidingWindowCreator:
         'voltage', 'current0', 'current1', 'current2'
     ]
 
-    # 滑动窗口参数
-    WINDOW_SIZE = 100  # 100点 = 1秒 @ 100Hz
-    STEP_SIZE = 50     # 步长50点 = 0.5秒
+    # 滑动窗口参数 @ 20Hz
+    WINDOW_SIZE = 100  # 100点 = 5秒 @ 20Hz
+    STEP_SIZE = 50     # 步长50点 = 2.5秒
 
     def __init__(self, data_path):
         """

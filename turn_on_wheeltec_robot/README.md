@@ -87,12 +87,22 @@
 **同时使用数据采集和 Web 控制时，必须分开启动以避免节点冲突：**
 
 ```bash
-# 终端 1：数据采集
+# 终端 1：启动底盘控制节点（必须先启动）
+roslaunch turn_on_wheeltec_robot turn_on_wheeltec_robot.launch
+
+# 终端 2：启动数据采集（current_reader + data_collector）
 roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=0
 
-# 终端 2：Web 控制（禁用冲突节点）
+# 终端 3：启动 Web 控制（禁用冲突节点）
 roslaunch turn_on_wheeltec_robot web_control.launch start_base:=false start_current_reader:=false start_data_collector:=false
 ```
+
+**节点分配：**
+| 终端 | 启动节点 |
+|------|----------|
+| 终端1 | wheeltec_robot（底盘控制、odom、imu、PowerVoltage） |
+| 终端2 | current_reader + data_collector |
+| 终端3 | web_cmd_vel_adapter + rosbridge + web_dashboard |
 
 **故障数据采集命令：**
 ```bash
@@ -377,10 +387,12 @@ turn_on_wheeltec_robot/
                             │
                             ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  分开启动（避免节点冲突）                                  │
+│  分开启动（三个终端，避免节点冲突）                       │
 │  终端1: roslaunch turn_on_wheeltec_robot                   │
-│              data_collector.launch fault_label:=X           │
+│              turn_on_wheeltec_robot.launch                  │
 │  终端2: roslaunch turn_on_wheeltec_robot                   │
+│              data_collector.launch fault_label:=X           │
+│  终端3: roslaunch turn_on_wheeltec_robot                   │
 │              web_control.launch start_base:=false \          │
 │              start_current_reader:=false \                  │
 │              start_data_collector:=false                   │
