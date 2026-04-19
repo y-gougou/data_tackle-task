@@ -46,7 +46,10 @@ rosrun turn_on_wheeltec_robot cmd_vel_web_adapter.py
 ├── scripts/                  # Python nodes
 │   ├── current_reader.py     # Reads current sensing board via serial
 │   ├── data_collector.py     # Subscribes to /odom, /imu, /PowerVoltage, /current_data → CSV
-│   ├── cmd_vel_web_adapter.py # Web cmd_vel safety adapter (timeout, estop, rate limiting)
+│   ├── cmd_vel_web_adapter.py # Web cmd_vel safety adapter + PID cruise control
+│   ├── preprocess_data.py      # Data preprocessing (missing values, outliers, normalization)
+│   ├── create_sliding_windows.py # Sliding window segmentation
+│   ├── validate_dataset.py     # Dataset validation and visualization
 │   └── web_dashboard_server.py # Serves web dashboard static files
 ├── launch/                   # Launch files
 │   ├── base_serial.launch    # Included by turn_on_wheeltec_robot.launch
@@ -82,11 +85,13 @@ rosrun turn_on_wheeltec_robot cmd_vel_web_adapter.py
 
 | Topic | Type | Direction | Purpose |
 |-------|------|-----------|---------|
-| `/odom` | nav_msgs/Odometry | publish | Odometry data |
-| `/imu` | sensor_msgs/Imu | publish | IMU data |
-| `/PowerVoltage` | std_msgs/Float32 | publish | Battery voltage |
-| `/current_data` | std_msgs/Float32MultiArray | publish | Three-channel current |
+| `/odom` | nav_msgs/Odometry | publish | Odometry data (20Hz) |
+| `/imu` | sensor_msgs/Imu | publish | IMU data (20Hz) |
+| `/PowerVoltage` | std_msgs/Float32 | publish | Battery voltage (20Hz) |
+| `/current_data` | std_msgs/Float32MultiArray | publish | Three-channel current (20Hz) |
 | `/cmd_vel_web` | geometry_msgs/Twist | subscribe | Web velocity command |
+| `/web/cruise_cmd` | geometry_msgs/Twist | subscribe | Cruise control target speed |
+| `/web/cruise_status` | std_msgs/String | publish | Cruise status feedback |
 | `/cmd_vel` | geometry_msgs/Twist | publish | Final motor velocity |
 | `/web/estop` | std_msgs/Bool | subscribe | Emergency stop |
 | `/web/heartbeat` | std_msgs/Empty | subscribe | Web heartbeat |
@@ -104,6 +109,10 @@ rostopic echo /imu
 rostopic echo /PowerVoltage
 rostopic echo /current_data
 rostopic echo /web/control_status
+rostopic echo /web/cruise_status
+
+# Send cruise command
+rostopic pub /web/cruise_cmd geometry_msgs/Twist '{linear: {x: 0.5}}'
 
 # Check topic rates
 rostopic hz /odom
@@ -141,22 +150,64 @@ timestamp,frame,x,y,z,vx,vy,vz,ax,ay,az,gx,gy,gz,voltage,current0,current1,curre
 | 3 | shaft_eccentric | Motor shaft eccentricity |
 | 4 | voltage_low | Low battery voltage |
 
-### Data Collection Commands
+### Data Collection Flow
+
+Two data sources:
+- Base controller serial → `/odom`, `/imu`, `/PowerVoltage` (13 channels, 20Hz)
+- Current sensor serial → `/current_data` (3 channels, 20Hz)
+
+**Approach 1: One-shot launch**
 ```bash
-# Normal state (label 0)
+# Starts: base + current_reader + data_collector
 roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=0
+```
 
-# Drive fault (label 1)
-roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=1
+**Approach 2: Separate terminals**
+```bash
+# Terminal 1: Start base
+roslaunch turn_on_wheeltec_robot turn_on_wheeltec_robot.launch
 
-# Hub loss (label 2)
-roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=2
+# Terminal 2: Start current reader
+rosrun turn_on_wheeltec_robot current_reader.py
 
-# Shaft eccentric (label 3)
-roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=3
+# Terminal 3: Start data collector
+rosrun turn_on_wheeltec_robot data_collector.py
 
-# Low voltage (label 4)
-roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=4
+# Terminal 4: Start web control (for moving the robot)
+roslaunch turn_on_wheeltec_robot web_control.launch
+```
+
+**Fault labels**:
+```bash
+roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=0  # normal
+roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=1  # drive_fault
+roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=2  # hub_loss
+roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=3  # shaft_eccentric
+roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=4  # voltage_low
+```
+
+## Data Processing Pipeline
+
+**Important**: `/odom` is 20Hz (not 100Hz). This affects all time-based parameters.
+
+Sliding window parameters:
+- Window size: 100 points = **5 seconds** @ 20Hz
+- Step size: 50 points = **2.5 seconds**
+- Overlap: 50%
+
+Normalization strategy:
+- Position/Velocity/Acceleration/Angular velocity/Current: symmetric [-1, 1]
+- Voltage: Min-Max [0, 1]
+
+```bash
+# Step 1: Preprocess (missing values, outliers, normalization)
+python preprocess_data.py --data_dir /home/wheeltec/R550PLUS_data_collect/log --pattern '*.csv' --normalize symmetric
+
+# Step 2: Create sliding windows + train/test split
+python create_sliding_windows.py --data_path /home/wheeltec/R550PLUS_data_collect/log/processed_xxx.csv
+
+# Step 3: Validate dataset
+python validate_dataset.py --data_dir /home/wheeltec/R550PLUS_data_collect/log
 ```
 
 ## Web Control Parameters (web_control.launch)

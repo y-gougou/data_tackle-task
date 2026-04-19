@@ -238,9 +238,9 @@ class DataPreprocessor:
         # 2. 检查时间戳连续性
         timestamps = self.raw_data['timestamp'].astype(float).values
         dt = np.diff(timestamps)
-        expected_dt = 0.01  # 100Hz期望间隔10ms
+        expected_dt = 0.05  # 20Hz期望间隔50ms
 
-        dt_anomalies = np.sum(np.abs(dt - expected_dt) > 0.005)  # 允许5ms误差
+        dt_anomalies = np.sum(np.abs(dt - expected_dt) > 0.01)  # 允许10ms误差
         print(f"\n时间戳连续性检查:")
         print(f"  期望间隔: {expected_dt*1000:.1f} ms")
         print(f"  实际间隔: {np.mean(dt)*1000:.2f} ± {np.std(dt)*1000:.2f} ms")
