@@ -173,7 +173,7 @@ class SyncedDataCollector:
         filename = "%s_%s.csv" % (self.fault_name, timestamp_str)
         filepath = os.path.join(self.output_dir, filename)
 
-        self.csv_file = open(filepath, 'w', newline='')
+        self.csv_file = open(filepath, 'w')
         self.csv_writer = csv.DictWriter(
             self.csv_file,
             fieldnames=[
