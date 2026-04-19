@@ -126,8 +126,37 @@ cat /dev/ttyUSB1
 ## CSV Output Format
 
 `data_collector.py` outputs to `/home/wheeltec/R550PLUS_data_collect/log/`:
+
+New format (with time sync and fault labels):
 ```
-timestamp,x,y,z,vx,vy,vz,ax,ay,az,gx,gy,gz,voltage,current0,current1,current2
+timestamp,frame,x,y,z,vx,vy,vz,ax,ay,az,gx,gy,gz,voltage,current0,current1,current2,fault_label
+```
+
+### Fault Labels
+| Label | Name | Description |
+|-------|------|-------------|
+| 0 | normal | Normal state |
+| 1 | drive_fault | Drive fault (single wheel blockage) |
+| 2 | hub_loss | Omni wheel hub loss/damage |
+| 3 | shaft_eccentric | Motor shaft eccentricity |
+| 4 | voltage_low | Low battery voltage |
+
+### Data Collection Commands
+```bash
+# Normal state (label 0)
+roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=0
+
+# Drive fault (label 1)
+roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=1
+
+# Hub loss (label 2)
+roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=2
+
+# Shaft eccentric (label 3)
+roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=3
+
+# Low voltage (label 4)
+roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=4
 ```
 
 ## Web Control Parameters (web_control.launch)

@@ -7,17 +7,67 @@ Input topics:
   - /cmd_vel_web (geometry_msgs/Twist)
   - /web/heartbeat (std_msgs/Empty)
   - /web/estop (std_msgs/Bool)
+  - /web/cruise_cmd (geometry_msgs/Twist) - cruise control target speeds
 
 Output topic:
   - /cmd_vel (geometry_msgs/Twist)
 
-This node keeps the existing chassis node untouched while adding a minimal
-timeout, estop latch, and speed limiting layer for browser control.
+This node keeps the existing chassis node untouched while adding:
+  - Timeout / heartbeat / estop safety
+  - Speed limiting and response shaping
+  - Cruise control with PID velocity闭环
+
+Cruise control usage:
+  rostopic pub /web/cruise_cmd geometry_msgs/Twist '{linear: {x: 0.5, y: 0.0, z: 0.0}}'
+  rostopic pub /web/cruise_cmd geometry_msgs/Twist '{}'  # cancel cruise
 """
 
 import rospy
 from geometry_msgs.msg import Twist
 from std_msgs.msg import Bool, Empty, String
+from nav_msgs.msg import Odometry
+
+
+class PIDController:
+    """简单PID控制器"""
+
+    def __init__(self, kp=0.8, ki=0.1, kd=0.3, output_limit=1.0):
+        self.kp = kp
+        self.ki = ki
+        self.kd = kd
+        self.output_limit = output_limit
+
+        self.integral = 0.0
+        self.prev_error = 0.0
+        self.prev_time = None
+
+    def compute(self, target, current, dt=None):
+        """计算PID输出"""
+        error = target - current
+
+        # 微分项
+        if dt is not None and dt > 0:
+            derivative = (error - self.prev_error) / dt
+        else:
+            derivative = 0.0
+
+        # 积分项（带限幅）
+        self.integral += error * (dt or 0.1)
+        self.integral = max(-0.5, min(0.5, self.integral))  # 积分限幅
+
+        # PID输出
+        output = self.kp * error + self.ki * self.integral + self.kd * derivative
+
+        # 输出限幅
+        output = max(-self.output_limit, min(self.output_limit, output))
+
+        self.prev_error = error
+        return output
+
+    def reset(self):
+        """重置PID状态"""
+        self.integral = 0.0
+        self.prev_error = 0.0
 
 
 class WebCmdVelAdapter(object):
@@ -27,6 +77,8 @@ class WebCmdVelAdapter(object):
         self.heartbeat_topic = rospy.get_param("~heartbeat_topic", "/web/heartbeat")
         self.estop_topic = rospy.get_param("~estop_topic", "/web/estop")
         self.status_topic = rospy.get_param("~status_topic", "/web/control_status")
+        self.cruise_cmd_topic = rospy.get_param("~cruise_cmd_topic", "/web/cruise_cmd")
+        self.odom_topic = rospy.get_param("~odom_topic", "/odom")
 
         self.publish_rate = rospy.get_param("~publish_rate", 20.0)
         self.cmd_timeout = rospy.get_param("~cmd_timeout", 0.5)
@@ -42,6 +94,9 @@ class WebCmdVelAdapter(object):
         self.min_lateral_ratio = rospy.get_param("~min_lateral_ratio", 0.15)
         self.min_angular_ratio = rospy.get_param("~min_angular_ratio", 0.24)
 
+        # PID参数
+        self.pid_rate = rospy.get_param("~pid_rate", 10.0)  # PID更新频率
+
         self.last_cmd = Twist()
         self.last_cmd_time = rospy.Time(0)
         self.last_heartbeat_time = rospy.Time(0)
@@ -49,12 +104,26 @@ class WebCmdVelAdapter(object):
         self.estop_latched = False
         self.last_status = ""
 
+        # 巡航控制状态
+        self.cruise_active = False
+        self.cruise_target = Twist()  # 目标速度
+        self.current_velocity = Twist()  # 当前实际速度
+        self.cruise_cmd_time = rospy.Time(0)
+
+        # PID控制器（每轴一个）
+        self.pid_x = PIDController(kp=0.8, ki=0.1, kd=0.3, output_limit=self.max_linear_x)
+        self.pid_y = PIDController(kp=0.8, ki=0.1, kd=0.3, output_limit=self.max_linear_y)
+        self.pid_angular = PIDController(kp=1.0, ki=0.05, kd=0.2, output_limit=self.max_angular_z)
+
         self.cmd_pub = rospy.Publisher(self.output_topic, Twist, queue_size=10)
         self.status_pub = rospy.Publisher(self.status_topic, String, queue_size=10, latch=True)
+        self.cruise_status_pub = rospy.Publisher("/web/cruise_status", String, queue_size=10, latch=True)
 
         rospy.Subscriber(self.input_topic, Twist, self.cmd_callback)
         rospy.Subscriber(self.heartbeat_topic, Empty, self.heartbeat_callback)
         rospy.Subscriber(self.estop_topic, Bool, self.estop_callback)
+        rospy.Subscriber(self.cruise_cmd_topic, Twist, self.cruise_cmd_callback)
+        rospy.Subscriber(self.odom_topic, Odometry, self.odom_callback)
 
         rospy.on_shutdown(self.on_shutdown)
         self.publish_status("idle")
@@ -100,7 +169,23 @@ class WebCmdVelAdapter(object):
             self.status_pub.publish(String(data=status))
             rospy.loginfo("web_cmd_vel_adapter status: %s", status)
 
+    def publish_cruise_status(self):
+        """发布巡航状态"""
+        if self.cruise_active:
+            status = "cruise: vx=%.2f(%.2f) vy=%.2f(%.2f) wz=%.2f(%.2f)" % (
+                self.cruise_target.linear.x, self.current_velocity.linear.x,
+                self.cruise_target.linear.y, self.current_velocity.linear.y,
+                self.cruise_target.angular.z, self.current_velocity.angular.z
+            )
+        else:
+            status = "cruise: off"
+        self.cruise_status_pub.publish(String(data=status))
+
     def cmd_callback(self, msg):
+        # 手动控制时自动退出巡航模式
+        if self.cruise_active:
+            self.exit_cruise()
+
         limited = Twist()
         limited.linear.x = self.shape_axis(
             self.clamp(msg.linear.x, self.max_linear_x),
@@ -125,23 +210,107 @@ class WebCmdVelAdapter(object):
         self.last_cmd_time = rospy.Time.now()
         self.have_cmd = True
 
+    def cruise_cmd_callback(self, msg):
+        """处理巡航命令"""
+        now = rospy.Time.now()
+
+        # 检查是否为零命令（取消巡航）
+        if (abs(msg.linear.x) < 0.001 and
+            abs(msg.linear.y) < 0.001 and
+            abs(msg.angular.z) < 0.001):
+            self.exit_cruise()
+            return
+
+        # 设置巡航目标
+        self.cruise_target.linear.x = self.clamp(msg.linear.x, self.max_linear_x)
+        self.cruise_target.linear.y = self.clamp(msg.linear.y, self.max_linear_y)
+        self.cruise_target.angular.z = self.clamp(msg.angular.z, self.max_angular_z)
+
+        self.cruise_cmd_time = now
+
+        if not self.cruise_active:
+            self.enter_cruise()
+
+        rospy.loginfo("Cruise target set: vx=%.2f vy=%.2f wz=%.2f",
+                     self.cruise_target.linear.x,
+                     self.cruise_target.linear.y,
+                     self.cruise_target.angular.z)
+
+    def odom_callback(self, msg):
+        """获取当前实际速度"""
+        self.current_velocity.linear.x = msg.twist.twist.linear.x
+        self.current_velocity.linear.y = msg.twist.twist.linear.y
+        self.current_velocity.angular.z = msg.twist.twist.angular.z
+
+    def enter_cruise(self):
+        """进入巡航模式"""
+        self.cruise_active = True
+        self.pid_x.reset()
+        self.pid_y.reset()
+        self.pid_angular.reset()
+        self.publish_status("cruise")
+        rospy.loginfo("Cruise control activated")
+
+    def exit_cruise(self):
+        """退出巡航模式"""
+        if not self.cruise_active:
+            return
+        self.cruise_active = False
+        self.pid_x.reset()
+        self.pid_y.reset()
+        self.pid_angular.reset()
+        self.publish_status("idle")
+        rospy.loginfo("Cruise control deactivated")
+
     def heartbeat_callback(self, _msg):
         self.last_heartbeat_time = rospy.Time.now()
 
     def estop_callback(self, msg):
         if msg.data:
             self.estop_latched = True
+            if self.cruise_active:
+                self.exit_cruise()
             self.publish_status("estop")
             self.cmd_pub.publish(self.zero_twist())
         else:
             self.estop_latched = False
             self.publish_status("idle")
 
+    def compute_cruise_cmd(self, dt):
+        """使用PID计算巡航控制输出"""
+        cmd = Twist()
+
+        # X轴PID
+        cmd.linear.x = self.pid_x.compute(
+            self.cruise_target.linear.x,
+            self.current_velocity.linear.x,
+            dt
+        )
+
+        # Y轴PID
+        cmd.linear.y = self.pid_y.compute(
+            self.cruise_target.linear.y,
+            self.current_velocity.linear.y,
+            dt
+        )
+
+        # 角速度PID
+        cmd.angular.z = self.pid_angular.compute(
+            self.cruise_target.angular.z,
+            self.current_velocity.angular.z,
+            dt
+        )
+
+        return cmd
+
     def resolve_status_and_command(self):
         now = rospy.Time.now()
 
         if self.estop_latched:
             return "estop", self.zero_twist()
+
+        if self.cruise_active:
+            return "cruise", None  # 命令由cruise控制循环计算
 
         if not self.have_cmd:
             return "idle", self.zero_twist()
@@ -159,10 +328,30 @@ class WebCmdVelAdapter(object):
 
     def run(self):
         rate = rospy.Rate(self.publish_rate)
+        pid_rate = rospy.Rate(self.pid_rate)
+
+        last_pid_time = rospy.Time.now()
+        cruise_cmd = self.zero_twist()
+
         while not rospy.is_shutdown():
-            status, cmd = self.resolve_status_and_command()
+            status, manual_cmd = self.resolve_status_and_command()
             self.publish_status(status)
-            self.cmd_pub.publish(cmd)
+
+            if status == "cruise":
+                # PID控制循环
+                now = rospy.Time.now()
+                dt = (now - last_pid_time).to_sec()
+                if dt > 0:
+                    cruise_cmd = self.compute_cruise_cmd(dt)
+                    last_pid_time = now
+                self.cmd_pub.publish(cruise_cmd)
+                self.publish_cruise_status()
+            else:
+                self.cmd_pub.publish(manual_cmd if manual_cmd else self.zero_twist())
+                # 巡航状态也要更新（显示当前速度）
+                if status != "estop":
+                    self.publish_cruise_status()
+
             rate.sleep()
 
     def on_shutdown(self):

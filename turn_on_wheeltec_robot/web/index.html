@@ -152,6 +152,31 @@
     .chart-legend .c-i0::before  { background: #e57373; }
     .chart-legend .c-i1::before  { background: #ba68c8; }
     .chart-legend .c-i2::before  { background: #fff176; }
+    .cruise-panel {
+      margin-top: 14px; padding: 14px;
+      border-radius: 16px; border: 1px solid var(--border);
+      background: linear-gradient(145deg,#f0f8f7,#e8f2f0);
+    }
+    .cruise-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+    .cruise-header h2 { margin: 0; font-size: 16px; }
+    .cruise-sliders { display: grid; gap: 10px; }
+    .cruise-row { display: flex; flex-direction: column; gap: 4px; }
+    .cruise-row label { font-size: 12px; color: var(--muted); }
+    .cruise-row input[type="range"] { width: 100%; accent-color: var(--accent); }
+    .cruise-val { font-size: 14px; font-weight: 700; min-width: 45px; text-align: right; font-family: Consolas,Monaco,monospace; }
+    .cruise-actions { display: flex; gap: 8px; margin-top: 12px; }
+    .cruise-actions button { flex: 1; padding: 10px; font-size: 13px; }
+    .cruise-feedback {
+      margin-top: 10px; display: flex; flex-direction: column; gap: 4px;
+      padding: 8px; border-radius: 10px; background: rgba(0,0,0,0.04);
+    }
+    .cruise-compare {
+      display: flex; align-items: center; gap: 6px; font-size: 12px;
+    }
+    .cruise-compare span { color: var(--muted); }
+    .cruise-compare strong { font-family: Consolas,Monaco,monospace; min-width: 45px; text-align: right; }
+    .cruise-compare .match { color: #2e7d32; }
+    .cruise-compare .diff { color: #c62828; }
     .log {
       margin-top: 16px; min-height: 90px; padding: 14px; border-radius: 16px;
       background: #0f222a; color: #d9e7ed;
@@ -191,6 +216,48 @@
           <div class="metric"><div class="metric-label">实测线速度 X</div><div class="metric-value" id="linearX">0.00</div></div>
           <div class="metric"><div class="metric-label">实测角速度 Z</div><div class="metric-value" id="angularZ">0.00</div></div>
         </div>
+
+        <!-- 巡航控制面板 -->
+        <div class="cruise-panel" id="cruisePanel">
+          <div class="cruise-header">
+            <h2>定速巡航</h2>
+            <div class="status-chip offline" id="cruiseState">关闭</div>
+          </div>
+          <p class="muted" style="font-size:12px;margin:4px 0 10px;">设定目标速度后自动保持，PID闭环控制</p>
+          <div class="cruise-sliders">
+            <div class="cruise-row">
+              <label>前进速度 Vx (m/s)</label>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <input type="range" id="cruiseVx" min="-100" max="100" value="0" step="5" />
+                <span class="cruise-val" id="cruiseVxVal">0.00</span>
+              </div>
+            </div>
+            <div class="cruise-row">
+              <label>横移速度 Vy (m/s)</label>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <input type="range" id="cruiseVy" min="-65" max="65" value="0" step="5" />
+                <span class="cruise-val" id="cruiseVyVal">0.00</span>
+              </div>
+            </div>
+            <div class="cruise-row">
+              <label>转向速度 Wz (rad/s)</label>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <input type="range" id="cruiseWz" min="-250" max="250" value="0" step="5" />
+                <span class="cruise-val" id="cruiseWzVal">0.00</span>
+              </div>
+            </div>
+          </div>
+          <div class="cruise-actions">
+            <button class="primary" id="cruiseStartBtn">启动巡航</button>
+            <button class="secondary" id="cruiseStopBtn">停止巡航</button>
+          </div>
+          <div class="cruise-feedback">
+            <div class="cruise-compare"><span>目标</span><strong id="cruiseTargetVx">0.00</strong><span>实际</span><strong id="cruiseActualVx">0.00</strong></div>
+            <div class="cruise-compare"><span>目标</span><strong id="cruiseTargetVy">0.00</strong><span>实际</strong><strong id="cruiseActualVy">0.00</strong></div>
+            <div class="cruise-compare"><span>目标</span><strong id="cruiseTargetWz">0.00</strong><span>实际</strong><strong id="cruiseActualWz">0.00</strong></div>
+          </div>
+        </div>
+
         <div class="log" id="logBox">等待连接…</div>
       </div>
 
@@ -372,6 +439,24 @@
     const speedMultEl   = document.getElementById("speedMultiplierDisplay");
     const joystick      = document.getElementById("joystick");
     const knob          = document.getElementById("knob");
+
+    // ── Cruise control DOM refs ─────────────────────────────────────────────
+    const cruisePanel     = document.getElementById("cruisePanel");
+    const cruiseStateEl   = document.getElementById("cruiseState");
+    const cruiseVxSlider  = document.getElementById("cruiseVx");
+    const cruiseVySlider  = document.getElementById("cruiseVy");
+    const cruiseWzSlider  = document.getElementById("cruiseWz");
+    const cruiseVxValEl   = document.getElementById("cruiseVxVal");
+    const cruiseVyValEl   = document.getElementById("cruiseVyVal");
+    const cruiseWzValEl   = document.getElementById("cruiseWzVal");
+    const cruiseStartBtn  = document.getElementById("cruiseStartBtn");
+    const cruiseStopBtn  = document.getElementById("cruiseStopBtn");
+    const cruiseTargetVx  = document.getElementById("cruiseTargetVx");
+    const cruiseActualVx  = document.getElementById("cruiseActualVx");
+    const cruiseTargetVy  = document.getElementById("cruiseTargetVy");
+    const cruiseActualVy  = document.getElementById("cruiseActualVy");
+    const cruiseTargetWz = document.getElementById("cruiseTargetWz");
+    const cruiseActualWz = document.getElementById("cruiseActualWz");
 
     // ── Tuning constants ──────────────────────────────────────────────────────
     const T = {
@@ -639,6 +724,96 @@
       gamepadPollHandle = requestAnimationFrame(tick);
     }
 
+    // ── Cruise control ──────────────────────────────────────────────────────
+    let cruiseActive = false;
+
+    function updateCruiseStatus(data) {
+      // 解析 cruise_status 消息格式: "cruise: vx=0.50(0.48) vy=0.00(0.01) wz=0.00(0.00)"
+      // 或者 "cruise: off"
+      if (!data || data === "cruise: off") {
+        cruiseActive = false;
+        cruiseStateEl.textContent = "关闭";
+        cruiseStateEl.className = "status-chip offline";
+        cruiseActualVx.textContent = "0.00";
+        cruiseActualVy.textContent = "0.00";
+        cruiseActualWz.textContent = "0.00";
+        return;
+      }
+
+      cruiseActive = true;
+      cruiseStateEl.textContent = "巡航中";
+      cruiseStateEl.className = "status-chip";
+
+      // 解析数据
+      const match = data.match(/vx=([-\d.]+)\(([-\d.]+)\)\s+vy=([-\d.]+)\(([-\d.]+)\)\s+wz=([-\d.]+)\(([-\d.]+)\)/);
+      if (match) {
+        const [, tVx, aVx, tVy, aVy, tWz, aWz] = match;
+        cruiseTargetVx.textContent = parseFloat(tVx).toFixed(2);
+        cruiseActualVx.textContent = parseFloat(aVx).toFixed(2);
+        cruiseTargetVy.textContent = parseFloat(tVy).toFixed(2);
+        cruiseActualVy.textContent = parseFloat(aVy).toFixed(2);
+        cruiseTargetWz.textContent = parseFloat(tWz).toFixed(2);
+        cruiseActualWz.textContent = parseFloat(aWz).toFixed(2);
+      }
+    }
+
+    function sendCruiseCommand() {
+      if (!socket || socket.readyState !== WebSocket.OPEN) return;
+      const vx = parseFloat(cruiseVxSlider.value) / 100;
+      const vy = parseFloat(cruiseVySlider.value) / 100;
+      const wz = parseFloat(cruiseWzSlider.value) / 100;
+      publish("/web/cruise_cmd", {
+        linear: { x: vx, y: vy, z: 0 },
+        angular: { x: 0, y: 0, z: wz }
+      });
+    }
+
+    function updateCruiseSliderDisplay() {
+      const vx = parseFloat(cruiseVxSlider.value) / 100;
+      const vy = parseFloat(cruiseVySlider.value) / 100;
+      const wz = parseFloat(cruiseWzSlider.value) / 100;
+      cruiseVxValEl.textContent = vx.toFixed(2);
+      cruiseVyValEl.textContent = vy.toFixed(2);
+      cruiseWzValEl.textContent = wz.toFixed(2);
+    }
+
+    cruiseVxSlider.addEventListener("input", () => {
+      updateCruiseSliderDisplay();
+      if (cruiseActive) sendCruiseCommand();
+    });
+    cruiseVySlider.addEventListener("input", () => {
+      updateCruiseSliderDisplay();
+      if (cruiseActive) sendCruiseCommand();
+    });
+    cruiseWzSlider.addEventListener("input", () => {
+      updateCruiseSliderDisplay();
+      if (cruiseActive) sendCruiseCommand();
+    });
+
+    cruiseStartBtn.addEventListener("click", () => {
+      if (!socket || socket.readyState !== WebSocket.OPEN) {
+        log("请先连接Rosbridge");
+        return;
+      }
+      sendCruiseCommand();
+      log("巡航启动: Vx=" + (parseFloat(cruiseVxSlider.value)/100).toFixed(2) +
+          " Vy=" + (parseFloat(cruiseVySlider.value)/100).toFixed(2) +
+          " Wz=" + (parseFloat(cruiseWzSlider.value)/100).toFixed(2));
+    });
+
+    cruiseStopBtn.addEventListener("click", () => {
+      // 发送零速度命令取消巡航
+      publish("/web/cruise_cmd", { linear: {x:0,y:0,z:0}, angular: {x:0,y:0,z:0} });
+      cruiseVxSlider.value = 0;
+      cruiseVySlider.value = 0;
+      cruiseWzSlider.value = 0;
+      updateCruiseSliderDisplay();
+      log("巡航停止");
+    });
+
+    // 初始化滑块显示
+    updateCruiseSliderDisplay();
+
     // ── Timers ────────────────────────────────────────────────────────────────
     function startTimers() {
       stopTimers();
@@ -677,6 +852,7 @@
         subscribe("/PowerVoltage",    "std_msgs/Float32");
         subscribe("/current_data",    "std_msgs/Float32MultiArray");
         subscribe("/web/control_status", "std_msgs/String");
+        subscribe("/web/cruise_status", "std_msgs/String");
         subscribe("/web/data_collect/status", "std_msgs/String");
         startTimers();
       };
@@ -710,6 +886,8 @@
           controlStatus.textContent = s;
           if (s.includes("estop")) setSocketState("E-STOP", "danger");
           else if (socket?.readyState === WebSocket.OPEN) setSocketState("Connected", "ok");
+        } else if (p.topic === "/web/cruise_status") {
+          updateCruiseStatus(p.msg.data || "");
         } else if (p.topic === "/web/data_collect/status") {
           try { updateRecStatus(JSON.parse(p.msg.data || "{}")); } catch(_) {}
         }
