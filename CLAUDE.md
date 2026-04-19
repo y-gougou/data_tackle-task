@@ -73,7 +73,7 @@ rosrun turn_on_wheeltec_robot cmd_vel_web_adapter.py
 
 1. **Sensor Data**: `wheeltec_robot_node` (C++) ← serial → `/odom`, `/imu`, `/PowerVoltage` @ 20Hz
 2. **Current Sensing**: `current_reader.py` ← serial → `/current_data` @ ~5-6Hz
-3. **CSV Recording**: `data_collector.py` uses `message_filters.ApproximateTimeSynchronizer` to sync topics → CSV log
+3. **CSV Recording**: `data_collector.py` subscribes independently, records on /odom trigger, stores timestamps for later sync → CSV log with independent timestamps
 4. **Web Control**: Browser → WebSocket → rosbridge → `/cmd_vel_web`, `/web/cruise_cmd`, `/web/cruise_enable` → `cmd_vel_web_adapter.py` → `/cmd_vel` → base
 
 ### Serial Devices
@@ -178,10 +178,20 @@ cat /dev/ttyUSB1
 
 `data_collector.py` outputs to `/home/wheeltec/R550PLUS_data_collect/log/`:
 
-New format (with time sync and fault labels):
+New format (with independent timestamps for each topic):
 ```
-timestamp,frame,x,y,z,vx,vy,vz,ax,ay,az,gx,gy,gz,voltage,current0,current1,current2,fault_label
+timestamp,frame,odom_time,imu_time,voltage_time,current_time,x,y,z,vx,vy,vz,ax,ay,az,gx,gy,gz,voltage,current0,current1,current2,fault_label
 ```
+
+Fields:
+- `timestamp`: Record base timestamp (from /odom)
+- `frame`: Frame counter
+- `odom_time`, `imu_time`, `voltage_time`, `current_time`: Independent timestamps for each topic (for preprocessing sync)
+- `x,y,z,vx,vy,vz`: Position and velocity from odometry
+- `ax,ay,az,gx,gy,gz`: IMU acceleration and angular velocity
+- `voltage`: Battery voltage
+- `current0,current1,current2`: Three-channel current
+- `fault_label`: Fault label (0-4)
 
 ### Fault Labels
 | Label | Name | Description |
@@ -214,9 +224,14 @@ Normalization strategy:
 - Position/Velocity/Acceleration/Angular velocity/Current: symmetric [-1, 1]
 - Voltage: Min-Max [0, 1]
 
+**Time Sync**: `preprocess_data.py` interpolates low-frequency channels (current ~5-6Hz) to odom timeline (20Hz).
+
 ```bash
-# Step 1: Preprocess (missing values, outliers, normalization)
+# Step 1: Preprocess (time sync / missing values / outliers / normalization)
 python preprocess_data.py --data_dir /home/wheeltec/R550PLUS_data_collect/log --pattern '*.csv' --normalize symmetric
+
+# Skip time sync (for legacy data)
+python preprocess_data.py --data_dir /home/wheeltec/R550PLUS_data_collect/log --pattern '*.csv' --no_sync
 
 # Step 2: Create sliding windows + train/test split
 python create_sliding_windows.py --data_path /home/wheeltec/R550PLUS_data_collect/log/processed_xxx.csv

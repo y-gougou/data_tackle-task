@@ -5,19 +5,25 @@ preprocess_data.py - 数据预处理模块
 
 功能：
 1. 加载CSV数据（支持多文件合并）
-2. 缺失值处理（线性插值）
-3. 异常值剔除（3σ原则）
-4. 数据归一化（Min-Max）
-5. 时间戳连续性检查
+2. 时间戳同步（对 low-frequency 通道如 current 进行插值对齐）
+3. 缺失值处理（线性插值）
+4. 异常值剔除（3σ原则）
+5. 数据归一化（Min-Max）
 6. 保存处理后数据及归一化参数
 
-滑动窗口参数（记录于此，供后续create_sliding_windows.py使用）：
-  窗口长度：100点 = 1秒 @ 100Hz
-  步长：50点 = 0.5秒
+采样率：20Hz（由底盘控制器决定）
+滑动窗口参数：
+  窗口长度：100点 = 5秒 @ 20Hz
+  步长：50点 = 2.5秒
   重叠率：50%
+
+时间同步说明：
+  CSV 中包含独立时间戳字段：odom_time, imu_time, voltage_time, current_time
+  由于 /current_data 频率较低（约5-6Hz），需要对其他通道进行插值对齐
 
 使用方法：
   python preprocess_data.py --data_dir /path/to/log --pattern '*.csv'
+  python preprocess_data.py --data_dir /path/to/log --pattern '*.csv' --no_sync  # 跳过时间同步（兼容旧数据）
 """
 
 import pandas as pd
@@ -155,7 +161,7 @@ class MultiChannelNormalizer:
 class DataPreprocessor:
     """数据预处理器"""
 
-    # 特征列名
+    # 特征列名（不含时间戳字段）
     FEATURE_COLUMNS = [
         'x', 'y', 'z',
         'vx', 'vy', 'vz',
@@ -163,6 +169,12 @@ class DataPreprocessor:
         'gx', 'gy', 'gz',
         'voltage', 'current0', 'current1', 'current2'
     ]
+
+    # 时间戳字段
+    TIMESTAMP_COLUMNS = ['timestamp', 'odom_time', 'imu_time', 'voltage_time', 'current_time']
+
+    # 需要同步的通道（低频率通道）
+    SYNC_COLUMNS = ['current0', 'current1', 'current2']
 
     # 故障标签名称映射
     LABEL_NAMES = {
@@ -219,6 +231,66 @@ class DataPreprocessor:
 
         return self.raw_data
 
+    def sync_timestamps(self):
+        """
+        时间戳同步：将 low-frequency 通道（current）插值到 odom 时间轴
+
+        由于 /current_data 频率较低（约5-6Hz），需要对电流数据进行插值，
+        使其与 /odom（20Hz）的时间轴对齐
+        """
+        print("时间戳同步处理...")
+
+        # 检查是否有独立时间戳字段
+        has_timestamp_cols = all(col in self.raw_data.columns for col in self.TIMESTAMP_COLUMNS)
+
+        if not has_timestamp_cols:
+            print("  警告: 未找到独立时间戳字段，跳过时间同步")
+            print("  （可能是旧格式数据，当前采集的数据已包含时间戳字段）")
+            return
+
+        # 检查 current 数据的时间戳分布
+        current_times = self.raw_data['current_time'].astype(float).values
+        odom_times = self.raw_data['timestamp'].astype(float).values
+
+        # 计算平均间隔
+        current_intervals = np.diff(current_times)
+        current_intervals = current_intervals[current_intervals > 0]  # 过滤异常值
+        if len(current_intervals) > 0:
+            avg_interval = np.mean(current_intervals)
+            print(f"  /current_data 平均间隔: {avg_interval*1000:.1f} ms")
+            print(f"  /odom 间隔: 50 ms (20Hz)")
+
+            # 如果间隔差异不大，说明已经同步过了
+            if avg_interval < 0.06:  # 60ms 以下认为频率接近
+                print("  电流数据频率较高，跳过插值同步")
+                return
+
+        # 对电流通道进行插值
+        print("  对电流通道进行线性插值...")
+
+        for col in self.SYNC_COLUMNS:
+            if col in self.raw_data.columns:
+                # 创建以 current_time 为索引的 Series
+                current_series = self.raw_data.set_index('current_time')[col].sort_index()
+
+                # 创建新的以 timestamp 为索引的目标 Series
+                new_index = pd.Index(odom_times, name='timestamp')
+
+                # 插值
+                interpolated = current_series.reindex(new_index, method='linear')
+
+                # 填充边界值
+                interpolated = interpolated.interpolate(method='linear', limit_direction='both')
+
+                # 更新原始数据
+                self.raw_data[col] = interpolated.values
+
+                null_count = interpolated.isnull().sum()
+                if null_count > 0:
+                    print(f"    {col}: {null_count} 个空值已通过插值填充")
+
+        print("  ✓ 时间戳同步完成")
+
     def check_data_quality(self):
         """
         检查数据质量
@@ -235,21 +307,22 @@ class DataPreprocessor:
         else:
             print("\n✓ 无缺失值")
 
-        # 2. 检查时间戳连续性
-        timestamps = self.raw_data['timestamp'].astype(float).values
-        dt = np.diff(timestamps)
-        expected_dt = 0.05  # 20Hz期望间隔50ms
+        # 2. 检查时间戳连续性（基于 odom 时间戳）
+        if 'timestamp' in self.raw_data.columns:
+            timestamps = self.raw_data['timestamp'].astype(float).values
+            dt = np.diff(timestamps)
+            expected_dt = 0.05  # 20Hz期望间隔50ms
 
-        dt_anomalies = np.sum(np.abs(dt - expected_dt) > 0.01)  # 允许10ms误差
-        print(f"\n时间戳连续性检查:")
-        print(f"  期望间隔: {expected_dt*1000:.1f} ms")
-        print(f"  实际间隔: {np.mean(dt)*1000:.2f} ± {np.std(dt)*1000:.2f} ms")
-        print(f"  异常点数: {dt_anomalies} ({dt_anomalies/len(dt)*100:.2f}%)")
+            dt_anomalies = np.sum(np.abs(dt - expected_dt) > 0.01)  # 允许10ms误差
+            print(f"\n时间戳连续性检查:")
+            print(f"  期望间隔: {expected_dt*1000:.1f} ms")
+            print(f"  实际间隔: {np.mean(dt)*1000:.2f} ± {np.std(dt)*1000:.2f} ms")
+            print(f"  异常点数: {dt_anomalies} ({dt_anomalies/len(dt)*100:.2f}%)")
 
-        if len(dt) > 0 and dt_anomalies / len(dt) > 0.1:
-            print("⚠ 警告: 超过10%的数据点时间间隔异常")
-        else:
-            print("✓ 时间戳连续性良好")
+            if len(dt) > 0 and dt_anomalies / len(dt) > 0.1:
+                print("⚠ 警告: 超过10%的数据点时间间隔异常")
+            else:
+                print("✓ 时间戳连续性良好")
 
         # 3. 故障标签分布
         print(f"\n故障标签分布:")
@@ -380,12 +453,13 @@ class DataPreprocessor:
 
         print()
 
-    def process_pipeline(self, remove_outliers_flag=True):
+    def process_pipeline(self, remove_outliers_flag=True, sync_flag=True):
         """
         完整预处理流程
 
         Args:
             remove_outliers_flag: 是否剔除异常值
+            sync_flag: 是否进行时间戳同步
 
         Returns:
             processed_data: 处理后的DataFrame
@@ -400,16 +474,22 @@ class DataPreprocessor:
         # Step 2: 初始化处理数据
         self.processed_data = self.raw_data.copy()
 
-        # Step 3: 处理缺失值
+        # Step 3: 时间戳同步（可选）
+        if sync_flag:
+            self.sync_timestamps()
+        else:
+            print("跳过时间戳同步步骤\n")
+
+        # Step 4: 处理缺失值
         self.handle_missing_values()
 
-        # Step 4: 剔除异常值
+        # Step 5: 剔除异常值
         if remove_outliers_flag:
             self.remove_outliers(sigma_threshold=3)
         else:
             print("跳过异常值剔除步骤\n")
 
-        # Step 5: 归一化（默认使用对称归一化[-1,1]，保留正负信息）
+        # Step 6: 归一化（默认使用对称归一化[-1,1]，保留正负信息）
         self.normalize(method='symmetric')
 
         print("=" * 50)
@@ -477,6 +557,8 @@ def main():
                        help='输出路径（不含后缀）')
     parser.add_argument('--no_outlier_removal', action='store_true',
                        help='跳过异常值剔除步骤')
+    parser.add_argument('--no_sync', action='store_true',
+                       help='跳过时间戳同步步骤（兼容旧数据格式）')
     parser.add_argument('--normalize', type=str, default='symmetric',
                        choices=['symmetric', 'mixed'],
                        help='归一化方法: symmetric=[-1,1]推荐, mixed=电压[0,1]其他[-1,1]')
@@ -492,7 +574,7 @@ def main():
     # 执行预处理流程
     preprocessor.process_pipeline(
         remove_outliers_flag=not args.no_outlier_removal,
-        normalize_method=args.normalize
+        sync_flag=not args.no_sync
     )
 
     # 保存处理后数据

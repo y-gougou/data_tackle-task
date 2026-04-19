@@ -138,13 +138,19 @@ rostopic pub /web/cruise_enable std_msgs/Bool '{data: false}'
 
 采集完成后，在机器人端或本地执行：
 
-### 步骤一：预处理（缺失值/异常值/归一化）
+### 步骤一：预处理（时间同步/缺失值/异常值/归一化）
 
 ```bash
 python ~/ml_robot_ws/src/turn_on_wheeltec_robot/scripts/preprocess_data.py \
     --data_dir /home/wheeltec/R550PLUS_data_collect/log \
     --pattern '*.csv' \
     --normalize symmetric
+
+# 跳过时间同步（兼容旧数据格式）
+python ~/ml_robot_ws/src/turn_on_wheeltec_robot/scripts/preprocess_data.py \
+    --data_dir /home/wheeltec/R550PLUS_data_collect/log \
+    --pattern '*.csv' \
+    --no_sync
 ```
 
 输出：
@@ -184,21 +190,27 @@ python ~/ml_robot_ws/src/turn_on_wheeltec_robot/scripts/validate_dataset.py \
 
 ### 时间同步
 
-`data_collector.py` 使用 `message_filters.ApproximateTimeSynchronizer` 同步不同频率的话题：
-- `/odom`, `/imu`, `/PowerVoltage`：20Hz（固定）
-- `/current_data`：~5-6Hz（异步）
-- 同步容差：20ms
+数据采集时独立记录各话题时间戳（odom_time, imu_time, voltage_time, current_time），在预处理阶段进行插值同步：
+- `/odom`, `/imu`, `/PowerVoltage`：20Hz（固件同步发布）
+- `/current_data`：~5-6Hz（独立接收）
+- 预处理时对电流数据进行线性插值对齐到 odom 时间轴
+
+使用 `--no_sync` 参数可跳过时间同步（兼容旧数据格式）。
 
 ### CSV 字段
 
 ```
-timestamp,frame,x,y,z,vx,vy,vz,ax,ay,az,gx,gy,gz,voltage,current0,current1,current2,fault_label
+timestamp,frame,odom_time,imu_time,voltage_time,current_time,x,y,z,vx,vy,vz,ax,ay,az,gx,gy,gz,voltage,current0,current1,current2,fault_label
 ```
 
 | 字段 | 说明 | 单位 | 来源 |
 |------|------|------|------|
-| timestamp | ROS 时间戳 | 秒 | - |
+| timestamp | 记录基准时间戳 | 秒 | /odom 时间戳 |
 | frame | 帧序号 | - | - |
+| odom_time | /odom 原始时间戳 | 秒 | 底盘串口 |
+| imu_time | /imu 原始时间戳 | 秒 | 底盘串口 |
+| voltage_time | /PowerVoltage 原始时间戳 | 秒 | 底盘串口 |
+| current_time | /current_data 原始时间戳 | 秒 | 电流传感器 |
 | x, y, z | 里程计位置 | 米 | 底盘串口 |
 | vx, vy, vz | 线速度 | m/s | 底盘串口 |
 | ax, ay, az | 加速度（IMU） | m/s² | 底盘串口 |
@@ -206,6 +218,8 @@ timestamp,frame,x,y,z,vx,vy,vz,ax,ay,az,gx,gy,gz,voltage,current0,current1,curre
 | voltage | 电池电压 | V | 底盘串口 |
 | current0~2 | 三通道电流 | A | 电流传感器 |
 | fault_label | 故障标签 | - | - |
+
+**注意**：各话题时间戳独立存储，供预处理阶段进行时间同步。
 
 ### 默认输出目录
 

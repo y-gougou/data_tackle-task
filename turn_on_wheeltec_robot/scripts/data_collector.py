@@ -1,12 +1,18 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-R550PLUS 三全向轮机器人数据采集节点 (带时间同步和故障标签)
-修改内容：
-1. 使用message_filters实现话题时间同步
-2. 添加fault_label标签字段
-3. 添加frame序号
-4. 优化数据存储格式
+R550PLUS 三全向轮机器人数据采集节点
+
+功能：
+1. 独立接收各话题，保存原始时间戳
+2. 基于 /odom 频率（20Hz）触发数据记录
+3. 其他话题使用最近一次收到的值
+4. CSV包含各话题独立时间戳，供预处理脚本进行时间同步
+
+采集频率：
+- 记录频率由 /odom 决定（20Hz）
+- /imu, /PowerVoltage 与 /odom 同步（固件20Hz）
+- /current_data 独立接收（约5-6Hz），使用最新值填充
 
 故障标签：
   0 - 正常状态
@@ -22,18 +28,15 @@ R550PLUS 三全向轮机器人数据采集节点 (带时间同步和故障标签
 import rospy
 import csv
 import os
-import time
 from datetime import datetime
-import numpy as np
 
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import Imu
 from std_msgs.msg import Float32, Float32MultiArray
-import message_filters
 
 
-class SyncedDataCollector:
-    """带时间同步的数据采集器"""
+class DataCollector:
+    """数据采集器 - 基于里程计触发，其他话题使用最新值"""
 
     # 故障标签名称映射
     FAULT_NAMES = {
@@ -50,11 +53,6 @@ class SyncedDataCollector:
 
         Args:
             fault_label: 故障标签
-                0 - 正常状态
-                1 - 驱动异常（单轮堵转）
-                2 - 轮毂丢失
-                3 - 电机轴偏心
-                4 - 电池电压偏低
         """
         # 故障标签
         self.fault_label = rospy.get_param('~fault_label', fault_label)
@@ -64,18 +62,22 @@ class SyncedDataCollector:
         self.output_dir = rospy.get_param('~output_dir',
             '/home/wheeltec/R550PLUS_data_collect/log')
 
-        # 采样率配置
-        self.rate = rospy.get_param('~rate', 100)  # Hz
-        self.sample_period = 1.0 / self.rate
-
-        # 时间同步阈值（秒）
-        self.sync_tolerance = rospy.get_param('~sync_tolerance', 0.02)  # 20ms
-
         # 帧计数
         self.frame_count = 0
-        self.last_odom_time = None
         self.csv_file = None
         self.csv_writer = None
+
+        # 存储最新收到的话题数据
+        self.latest_data = {
+            'odom': None,
+            'imu': None,
+            'voltage': None,
+            'current': None,
+            'odom_time': None,
+            'imu_time': None,
+            'voltage_time': None,
+            'current_time': None,
+        }
 
         # 创建输出目录
         self.create_output_dir()
@@ -83,69 +85,119 @@ class SyncedDataCollector:
         # 打开CSV文件
         self.open_csv_file()
 
-        # 设置时间同步订阅器
-        self.setup_sync_subscribers()
+        # 设置订阅器（独立订阅，不同步）
+        self.setup_subscribers()
 
         rospy.loginfo("数据采集器已启动，故障标签: %d (%s)", self.fault_label, self.fault_name)
-        rospy.loginfo("采样率: %d Hz，输出目录: %s", self.rate, self.output_dir)
+        rospy.loginfo("输出目录: %s", self.output_dir)
 
-    def setup_sync_subscribers(self):
-        """设置时间同步订阅器"""
-        # 使用ApproximateTimeSynchronizer实现软同步
-        odom_sub = message_filters.Subscriber('/odom', Odometry)
-        imu_sub = message_filters.Subscriber('/imu', Imu)
-        voltage_sub = message_filters.Subscriber('/PowerVoltage', Float32)
-        current_sub = message_filters.Subscriber('/current_data', Float32MultiArray)
+    def setup_subscribers(self):
+        """设置独立订阅器"""
+        # /odom 是主触发源，每次收到就记录一行
+        rospy.Subscriber('/odom', Odometry, self.odom_callback)
+        rospy.Subscriber('/imu', Imu, self.imu_callback)
+        rospy.Subscriber('/PowerVoltage', Float32, self.voltage_callback)
+        rospy.Subscriber('/current_data', Float32MultiArray, self.current_callback)
+        rospy.loginfo("独立订阅器已启动 (/odom 触发记录)")
 
-        # 同步器配置：队列大小10，时间容差0.02秒
-        # allow_headerless=True: Float32/Float32MultiArray 没有header，自动使用ROS时间
-        sync = message_filters.ApproximateTimeSynchronizer(
-            [odom_sub, imu_sub, voltage_sub, current_sub],
-            queue_size=10,
-            slop=self.sync_tolerance,
-            allow_headerless=True
-        )
-        sync.registerCallback(self.synchronized_callback)
+    def odom_callback(self, msg):
+        """里程计回调 - 触发数据记录"""
+        # 更新时间戳
+        self.latest_data['odom'] = msg
+        self.latest_data['odom_time'] = msg.header.stamp.to_sec()
 
-        rospy.loginfo("时间同步订阅器已启动 (容差: %.3fs)", self.sync_tolerance)
+        # 记录一行数据（使用 odom 时间戳作为基准）
+        self.record_data()
 
-    def synchronized_callback(self, odom, imu, voltage, current):
-        """
-        同步回调函数 - 所有话题数据在同一时间点被处理
-        """
+    def imu_callback(self, msg):
+        """IMU 回调 - 更新最新值"""
+        self.latest_data['imu'] = msg
+        self.latest_data['imu_time'] = msg.header.stamp.to_sec()
+
+    def voltage_callback(self, msg):
+        """电压回调 - 更新最新值"""
+        self.latest_data['voltage'] = msg
+        self.latest_data['voltage_time'] = rospy.Time.now().to_sec()
+
+    def current_callback(self, msg):
+        """电流回调 - 更新最新值"""
+        self.latest_data['current'] = msg
+        self.latest_data['current_time'] = rospy.Time.now().to_sec()
+
+    def record_data(self):
+        """记录一行数据"""
         try:
-            # 获取ROS时间戳（使用里程计的时间戳作为基准）
-            timestamp = odom.header.stamp.to_sec()
+            odom = self.latest_data['odom']
+            imu = self.latest_data['imu']
+            voltage = self.latest_data['voltage']
+            current = self.latest_data['current']
 
-            # 检查数据连续性
-            if self.last_odom_time is not None:
-                dt = timestamp - self.last_odom_time
-                # 如果时间间隔异常（超过2倍的采样周期），记录警告
-                if dt > 2 * self.sample_period:
-                    rospy.logwarn("数据跳跃检测: dt=%.4fs, 期望约%.4fs", dt, self.sample_period)
+            # 基准时间戳
+            timestamp = self.latest_data['odom_time']
 
-            self.last_odom_time = timestamp
+            # 如果还没有收到其他话题的数据，使用默认值
+            if imu is None:
+                imu_data = {'x': 0, 'y': 0, 'z': 0, 'gx': 0, 'gy': 0, 'gz': 0}
+                imu_time = timestamp
+            else:
+                imu_data = {
+                    'x': imu.linear_acceleration.x,
+                    'y': imu.linear_acceleration.y,
+                    'z': imu.linear_acceleration.z,
+                    'gx': imu.angular_velocity.x,
+                    'gy': imu.angular_velocity.y,
+                    'gz': imu.angular_velocity.z,
+                }
+                imu_time = self.latest_data['imu_time']
+
+            if voltage is None:
+                voltage_val = 0.0
+                voltage_time = timestamp
+            else:
+                voltage_val = voltage.data
+                voltage_time = self.latest_data['voltage_time']
+
+            if current is None:
+                current_vals = [0.0, 0.0, 0.0]
+                current_time = timestamp
+            else:
+                current_vals = list(current.data)
+                current_time = self.latest_data['current_time']
 
             # 构建数据行
             row = {
+                # 基准时间戳（odom）
                 'timestamp': "%.6f" % timestamp,
+                # 各话题的原始时间戳（供后续预处理同步）
+                'odom_time': "%.6f" % timestamp,
+                'imu_time': "%.6f" % imu_time,
+                'voltage_time': "%.6f" % voltage_time,
+                'current_time': "%.6f" % current_time,
+                # 帧计数
                 'frame': self.frame_count,
+                # 位置
                 'x': "%.6f" % odom.pose.pose.position.x,
                 'y': "%.6f" % odom.pose.pose.position.y,
                 'z': "%.6f" % odom.pose.pose.position.z,
+                # 速度
                 'vx': "%.6f" % odom.twist.twist.linear.x,
                 'vy': "%.6f" % odom.twist.twist.linear.y,
                 'vz': "%.6f" % odom.twist.twist.linear.z,
-                'ax': "%.6f" % imu.linear_acceleration.x,
-                'ay': "%.6f" % imu.linear_acceleration.y,
-                'az': "%.6f" % imu.linear_acceleration.z,
-                'gx': "%.6f" % imu.angular_velocity.x,
-                'gy': "%.6f" % imu.angular_velocity.y,
-                'gz': "%.6f" % imu.angular_velocity.z,
-                'voltage': "%.4f" % voltage.data,
-                'current0': "%.4f" % current.data[0],
-                'current1': "%.4f" % current.data[1],
-                'current2': "%.4f" % current.data[2],
+                # 加速度
+                'ax': "%.6f" % imu_data['x'],
+                'ay': "%.6f" % imu_data['y'],
+                'az': "%.6f" % imu_data['z'],
+                # 角速度
+                'gx': "%.6f" % imu_data['gx'],
+                'gy': "%.6f" % imu_data['gy'],
+                'gz': "%.6f" % imu_data['gz'],
+                # 电压
+                'voltage': "%.4f" % voltage_val,
+                # 电流
+                'current0': "%.4f" % current_vals[0] if len(current_vals) > 0 else "0.0000",
+                'current1': "%.4f" % current_vals[1] if len(current_vals) > 1 else "0.0000",
+                'current2': "%.4f" % current_vals[2] if len(current_vals) > 2 else "0.0000",
+                # 故障标签
                 'fault_label': self.fault_label
             }
 
@@ -160,7 +212,7 @@ class SyncedDataCollector:
                 rospy.loginfo("已采集 %d 帧数据", self.frame_count)
 
         except Exception as e:
-            rospy.logerr("数据采集回调错误: %s", str(e))
+            rospy.logerr("数据记录错误: %s", str(e))
 
     def create_output_dir(self):
         """创建输出目录"""
@@ -179,7 +231,9 @@ class SyncedDataCollector:
         self.csv_writer = csv.DictWriter(
             self.csv_file,
             fieldnames=[
-                'timestamp', 'frame', 'x', 'y', 'z',
+                'timestamp', 'frame',
+                'odom_time', 'imu_time', 'voltage_time', 'current_time',
+                'x', 'y', 'z',
                 'vx', 'vy', 'vz',
                 'ax', 'ay', 'az',
                 'gx', 'gy', 'gz',
@@ -210,12 +264,12 @@ class SyncedDataCollector:
 
 def main():
     """主函数"""
-    rospy.init_node('synced_data_collector', anonymous=True)
+    rospy.init_node('data_collector', anonymous=True)
 
     # 从参数获取故障标签
     fault_label = int(rospy.get_param('~fault_label', 0))
 
-    collector = SyncedDataCollector(fault_label=fault_label)
+    collector = DataCollector(fault_label=fault_label)
 
     # 注册关闭钩子
     rospy.on_shutdown(collector.on_shutdown)
