@@ -237,17 +237,6 @@ class WebCmdVelAdapter(object):
                 self.exit_cruise()
                 rospy.loginfo("Cruise disabled via /web/cruise_enable")
 
-    def cruise_enable_callback(self, msg):
-        """处理巡航使能/禁用"""
-        if msg.data:
-            if not self.cruise_active:
-                self.enter_cruise()
-                rospy.loginfo("Cruise enabled via /web/cruise_enable")
-        else:
-            if self.cruise_active:
-                self.exit_cruise()
-                rospy.loginfo("Cruise disabled via /web/cruise_enable")
-
     def odom_callback(self, msg):
         """获取当前实际速度"""
         self.current_velocity.linear.x = msg.twist.twist.linear.x

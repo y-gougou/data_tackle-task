@@ -16,7 +16,9 @@
 | 数据源 | 串口 | 话题 | 通道数 | 频率 |
 |--------|------|------|--------|------|
 | 底盘控制器 | `/dev/ttyCH343USB0` | `/odom`, `/imu`, `/PowerVoltage` | 13通道 | 20Hz |
-| 电流传感器 | `/dev/ttyUSB1` | `/current_data` | 3通道 | 20Hz |
+| 电流传感器 | `/dev/ttyUSB1` | `/current_data` | 3通道 | ~5-6Hz |
+
+**内部采样频率**：IMU 芯片 MPU6050 内部采样 100Hz，但 ROS 发布频率为 20Hz。
 
 **13通道底盘数据**：
 - 位置：x, y, z（里程计）
@@ -48,19 +50,19 @@
                    │ data_collector  │
                    │      .py        │
                    │ message_filters  │
-                   │  时间同步        │
+                   │  时间同步(20ms)  │
                    └─────────────────┘
 
 浏览器 WebSocket
         │
         ▼
-  rosbridge_websocket
+  rosbridge_websocket (ws://0.0.0.0:9090)
         │
         ▼
-  /cmd_vel_web + /web/cruise_cmd + /web/heartbeat + /web/estop
+  /cmd_vel_web + /web/cruise_cmd + /web/cruise_enable + /web/heartbeat + /web/estop
         │
         ▼
-  cmd_vel_web_adapter.py (PID巡航 + 安全保护)
+  cmd_vel_web_adapter.py (安全保护 + PID巡航)
         │
         ▼
       /cmd_vel → wheeltec_robot_node
@@ -80,90 +82,54 @@
 
 ---
 
-## 数据采集流程
+## 启动方式（重要）
 
-### 前提条件
-
-```bash
-cd ~/ml_robot_ws
-catkin_make
-source devel/setup.bash
-```
-
-### 方式一：一键启动（推荐）
+**同时使用数据采集和 Web 控制时，必须分开启动以避免节点冲突：**
 
 ```bash
-# 启动底盘 + 电流采集 + 数据采集
-roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=0
-```
-
-此 launch 会自动启动：
-- `turn_on_wheeltec_robot.launch`（底盘串口节点）
-- `current_reader.py`（电流采集节点）
-- `data_collector.py`（CSV记录节点）
-
-### 方式二：分开启动
-
-**终端 1 - 启动底盘**：
-```bash
-roslaunch turn_on_wheeltec_robot turn_on_wheeltec_robot.launch
-```
-
-**终端 2 - 启动电流采集**：
-```bash
-rosrun turn_on_wheeltec_robot current_reader.py
-```
-
-**终端 3 - 启动数据采集**：
-```bash
-rosrun turn_on_wheeltec_robot data_collector.py
-```
-
-### 启动 Web 控制（控制机器人移动）
-
-**终端 4**：
-```bash
-roslaunch turn_on_wheeltec_robot web_control.launch
-```
-
-浏览器打开：`http://<robot-ip>:8000`
-
-### 故障数据采集命令
-
-```bash
-# 正常状态
+# 终端 1：数据采集
 roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=0
 
-# 驱动异常（单轮堵转）
-roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=1
+# 终端 2：Web 控制（禁用冲突节点）
+roslaunch turn_on_wheeltec_robot web_control.launch start_base:=false start_current_reader:=false start_data_collector:=false
+```
 
-# 轮毂丢失/损坏
-roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=2
-
-# 电机轴偏心
-roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=3
-
-# 电池低压
-roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=4
+**故障数据采集命令：**
+```bash
+roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=0  # 正常
+roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=1  # 驱动异常
+roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=2  # 轮毂丢失
+roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=3  # 电机轴偏心
+roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=4  # 电池低压
 ```
 
 采集足够时间后按 `Ctrl+C` 停止。
 
-### 定速巡航使用方法
+---
 
-1. 连接 Rosbridge
-2. 在"定速巡航"面板设置目标速度（Vx/Vy/Wz）
-3. 点击"启动巡航"
-4. 机器人自动保持设定速度
-5. 点击"停止巡航"或手动接管退出
+## 定速巡航使用方法
 
-rostopic 命令示例：
+1. 浏览器打开 `http://<robot-ip>:8000`
+2. 连接 Rosbridge
+3. 在"定速巡航"面板设置目标速度（Vx/Vy/Wz滑块）
+4. 点击"启动巡航"
+5. 机器人自动保持设定速度
+6. 点击"停止巡航"退出
+
+**巡航控制逻辑：**
+- `/web/cruise_enable` (Bool) - 控制巡航开启/关闭
+- `/web/cruise_cmd` (Twist) - 设置目标速度
+- 摇杆控制不会退出巡航模式
+- 巡航只能通过"停止巡航"按钮或 E-stop 退出
+
+**rostopic 命令示例：**
 ```bash
 # 匀速 0.5m/s 前进
 rostopic pub /web/cruise_cmd geometry_msgs/Twist '{linear: {x: 0.5}}'
+rostopic pub /web/cruise_enable std_msgs/Bool '{data: true}'
 
-# 取消巡航
-rostopic pub /web/cruise_cmd geometry_msgs/Twist '{}'
+# 停止巡航
+rostopic pub /web/cruise_enable std_msgs/Bool '{data: false}'
 ```
 
 ---
@@ -210,10 +176,18 @@ python ~/ml_robot_ws/src/turn_on_wheeltec_robot/scripts/validate_dataset.py \
 
 ### 采样率
 
-- **实际采样频率：20Hz**（由底盘控制器决定）
-- 100点滑动窗口 = **5秒**数据
+- **ROS 话题频率：20Hz**（由底盘控制器决定）
+- **IMU 内部采样：100Hz**（固件滤波后对外发布 20Hz）
+- 100点滑动窗口 = **5秒**数据 @ 20Hz
 - 50点步长 = **2.5秒**
 - 重叠率：50%
+
+### 时间同步
+
+`data_collector.py` 使用 `message_filters.ApproximateTimeSynchronizer` 同步不同频率的话题：
+- `/odom`, `/imu`, `/PowerVoltage`：20Hz（固定）
+- `/current_data`：~5-6Hz（异步）
+- 同步容差：20ms
 
 ### CSV 字段
 
@@ -279,6 +253,9 @@ timestamp,frame,x,y,z,vx,vy,vz,ax,ay,az,gx,gy,gz,voltage,current0,current1,curre
 
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
+| `start_base` | `true` | 是否启动底盘节点 |
+| `start_current_reader` | `true` | 是否启动电流采集节点 |
+| `start_data_collector` | `true` | 是否启动数据采集节点 |
 | `rosbridge_port` | `9090` | rosbridge 端口 |
 | `web_port` | `8000` | Web 页面端口 |
 | `publish_rate` | `40.0` | 控制发布频率（Hz） |
@@ -310,6 +287,7 @@ rostopic echo /web/cruise_status
 
 # 发送巡航命令
 rostopic pub /web/cruise_cmd geometry_msgs/Twist '{linear: {x: 0.5}}'
+rostopic pub /web/cruise_enable std_msgs/Bool '{data: true}'
 
 # 查看数据采集输出
 ls -la /home/wheeltec/R550PLUS_data_collect/log/
@@ -337,6 +315,9 @@ PID 参数需根据地面情况调整。当前参数适合瓷砖地面。
 - 确认 `9090` 端口可访问
 - 确认页面中 WebSocket 地址是机器人实际 IP
 
+### 5. 节点冲突
+同时启动 data_collector.launch 和 web_control.launch 会导致节点冲突。使用分开启动方式。
+
 ---
 
 ## 文件清单
@@ -350,16 +331,16 @@ turn_on_wheeltec_robot/
 │   ├── current_reader.py            # 电流读取脚本
 │   ├── data_collector.py           # 数据采集脚本（message_filters同步）
 │   ├── cmd_vel_web_adapter.py      # Web控制适配器（PID巡航）
-│   ├── preprocess_data.py           # 数据预处理
+│   ├── preprocess_data.py          # 数据预处理
 │   ├── create_sliding_windows.py   # 滑动窗口分割
 │   ├── validate_dataset.py          # 数据集验证
-│   └── web_dashboard_server.py     # Web页面服务
+│   └── web_dashboard_server.py      # Web页面服务
 ├── web/
 │   └── index.html                  # Web控制页面（含巡航UI）
 ├── launch/
-│   ├── turn_on_wheeltec_robot.launch # 底盘启动
-│   ├── data_collector.launch        # 数据采集启动
-│   ├── web_control.launch          # Web控制启动
+│   ├── turn_on_wheeltec_robot.launch  # 底盘启动
+│   ├── data_collector.launch         # 数据采集启动
+│   ├── web_control.launch           # Web控制启动
 │   └── include/base_serial.launch   # 底盘串口配置
 └── README.md
 ```
@@ -382,35 +363,31 @@ turn_on_wheeltec_robot/
                             │
                             ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  方式一：一键启动                                          │
-│  roslaunch turn_on_wheeltec_robot data_collector.launch    │
-│              fault_label:=X                                 │
-│                                                             │
-│  方式二：分开启动                                          │
+│  分开启动（避免节点冲突）                                  │
 │  终端1: roslaunch turn_on_wheeltec_robot                   │
-│              turn_on_wheeltec_robot.launch                   │
-│  终端2: rosrun turn_on_wheeltec_robot current_reader.py   │
-│  终端3: rosrun turn_on_wheeltec_robot data_collector.py   │
+│              data_collector.launch fault_label:=X           │
+│  终端2: roslaunch turn_on_wheeltec_robot                   │
+│              web_control.launch start_base:=false \          │
+│              start_current_reader:=false \                  │
+│              start_data_collector:=false                   │
 └─────────────────────────────────────────────────────────────┘
                             │
                             ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  控制机器人移动（同时进行）                                  │
-│  终端4: roslaunch turn_on_wheeltec_robot                   │
-│              web_control.launch                             │
+│  控制机器人移动                                            │
 │  浏览器打开 http://<robot-ip>:8000                         │
-│  使用摇杆/定速巡航控制机器人                                │
+│  使用摇杆/定速巡航控制机器人匀速移动                       │
 └─────────────────────────────────────────────────────────────┘
                             │
                             ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  采集足够时间后 Ctrl+C 停止                                │
-│  采集 10-15 分钟/种故障类型                                │
+│  采集足够时间后 Ctrl+C 停止                               │
+│  采集 10-15 分钟/种故障类型                               │
 └─────────────────────────────────────────────────────────────┘
                             │
                             ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  预处理（机器人或本地）                                     │
+│  预处理（机器人或本地）                                    │
 │  python preprocess_data.py --data_dir ... --pattern '*.csv' │
 │  python create_sliding_windows.py --data_path ...           │
 │  python validate_dataset.py --data_dir ...                  │

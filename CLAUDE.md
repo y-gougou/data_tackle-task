@@ -19,14 +19,23 @@ source devel/setup.bash
 ```
 
 ### Running Nodes
+
+**IMPORTANT**: When running data collection and web control simultaneously, you MUST start them separately to avoid node name conflicts:
+
 ```bash
-# Base robot node
+# Terminal 1: Data collection
+roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=0
+
+# Terminal 2: Web control (disable conflicting nodes)
+roslaunch turn_on_wheeltec_robot web_control.launch start_base:=false start_current_reader:=false start_data_collector:=false
+```
+
+Other commands:
+```bash
+# Base robot node only
 roslaunch turn_on_wheeltec_robot turn_on_wheeltec_robot.launch
 
-# Data collection with CSV output
-roslaunch turn_on_wheeltec_robot data_collector.launch
-
-# Web control MVP (browser at http://<robot-ip>:8000)
+# Web control only (includes everything except data collection)
 roslaunch turn_on_wheeltec_robot web_control.launch
 
 # Individual Python nodes
@@ -45,7 +54,7 @@ rosrun turn_on_wheeltec_robot cmd_vel_web_adapter.py
 │   └── Quaternion_Solution.cpp # IMU quaternion math
 ├── scripts/                  # Python nodes
 │   ├── current_reader.py     # Reads current sensing board via serial
-│   ├── data_collector.py     # Subscribes to /odom, /imu, /PowerVoltage, /current_data → CSV
+│   ├── data_collector.py     # Subscribes to /odom, /imu, /PowerVoltage, /current_data → CSV (uses message_filters for time sync)
 │   ├── cmd_vel_web_adapter.py # Web cmd_vel safety adapter + PID cruise control
 │   ├── preprocess_data.py      # Data preprocessing (missing values, outliers, normalization)
 │   ├── create_sliding_windows.py # Sliding window segmentation
@@ -54,7 +63,7 @@ rosrun turn_on_wheeltec_robot cmd_vel_web_adapter.py
 ├── launch/                   # Launch files
 │   ├── base_serial.launch    # Included by turn_on_wheeltec_robot.launch
 │   ├── turn_on_wheeltec_robot.launch # Base robot + imu + odom
-│   ├── data_collector.launch # Base + current + data collection
+│   ├── data_collector.launch # Data collection launch
 │   └── web_control.launch    # Rosbridge + web dashboard + adapter
 └── web/
     └── index.html            # Browser-based joystick control + monitoring
@@ -62,10 +71,10 @@ rosrun turn_on_wheeltec_robot cmd_vel_web_adapter.py
 
 ### Data Flow
 
-1. **Sensor Data**: `wheeltec_robot_node` (C++) ← serial → `/odom`, `/imu`, `/PowerVoltage`
-2. **Current Sensing**: `current_reader.py` ← serial → `/current_data`
-3. **CSV Recording**: `data_collector.py` subscribes to all sensor topics → CSV log
-4. **Web Control**: Browser → WebSocket → rosbridge → `/cmd_vel_web` → `cmd_vel_web_adapter.py` → `/cmd_vel` → base
+1. **Sensor Data**: `wheeltec_robot_node` (C++) ← serial → `/odom`, `/imu`, `/PowerVoltage` @ 20Hz
+2. **Current Sensing**: `current_reader.py` ← serial → `/current_data` @ ~5-6Hz
+3. **CSV Recording**: `data_collector.py` uses `message_filters.ApproximateTimeSynchronizer` to sync topics → CSV log
+4. **Web Control**: Browser → WebSocket → rosbridge → `/cmd_vel_web`, `/web/cruise_cmd`, `/web/cruise_enable` → `cmd_vel_web_adapter.py` → `/cmd_vel` → base
 
 ### Serial Devices
 
@@ -74,28 +83,58 @@ rosrun turn_on_wheeltec_robot cmd_vel_web_adapter.py
 | Base controller | `/dev/ttyCH343USB0` | 115200 | Motor control, odometry, IMU |
 | Current sensing | `/dev/ttyUSB1` | 115200 | Three-channel current reading |
 
+### Internal Sampling vs ROS Publishing
+
+- **IMU internal sampling**: 100Hz (MPU6050 chip)
+- **ROS topic publish rate**: 20Hz (firmware downsamples)
+- **Current sensor**: ~5-6Hz (independent)
+
+This is normal - the firmware does internal filtering at 100Hz but only publishes at 20Hz to save bandwidth.
+
+## Cruise Control
+
+### Topics
+
+| Topic | Type | Direction | Purpose |
+|-------|------|-----------|---------|
+| `/web/cruise_enable` | std_msgs/Bool | subscribe | Enable/disable cruise mode |
+| `/web/cruise_cmd` | geometry_msgs/Twist | subscribe | Set target velocity for cruise |
+| `/web/cruise_status` | std_msgs/String | publish | Cruise status feedback |
+
+### Cruise Control Logic
+
+- `/web/cruise_enable:=True` → activates cruise mode
+- `/web/cruise_cmd` → sets target velocity (doesn't activate cruise)
+- Joystick input (`/cmd_vel_web`) does NOT exit cruise mode
+- Cruise can ONLY be exited via:
+  1. `/web/cruise_enable:=False`
+  2. E-stop (`/web/estop:=True`)
+  3. Node shutdown
+
 ### Embedded Firmware (`omi_car/`)
 
 - Keil ARM MDK project with CMSIS device files
 - Flashed via .hex file (R550PLUS_C50C_大车全向轮_2023.12.04.hex)
+- Uses FreeRTOS with tasks: Balance_task (100Hz), MPU6050_task (100Hz), show_task (10Hz), data_task (20Hz)
 - Uses VS Code with EIDE extension for development
 - Target: ARM Cortex-M series microcontroller
 
 ## Key Topics
 
-| Topic | Type | Direction | Purpose |
-|-------|------|-----------|---------|
-| `/odom` | nav_msgs/Odometry | publish | Odometry data (20Hz) |
-| `/imu` | sensor_msgs/Imu | publish | IMU data (20Hz) |
-| `/PowerVoltage` | std_msgs/Float32 | publish | Battery voltage (20Hz) |
-| `/current_data` | std_msgs/Float32MultiArray | publish | Three-channel current (20Hz) |
-| `/cmd_vel_web` | geometry_msgs/Twist | subscribe | Web velocity command |
-| `/web/cruise_cmd` | geometry_msgs/Twist | subscribe | Cruise control target speed |
-| `/web/cruise_status` | std_msgs/String | publish | Cruise status feedback |
-| `/cmd_vel` | geometry_msgs/Twist | publish | Final motor velocity |
-| `/web/estop` | std_msgs/Bool | subscribe | Emergency stop |
-| `/web/heartbeat` | std_msgs/Empty | subscribe | Web heartbeat |
-| `/web/control_status` | std_msgs/String | publish | Control status |
+| Topic | Type | Direction | Purpose | Rate |
+|-------|------|-----------|---------|------|
+| `/odom` | nav_msgs/Odometry | publish | Odometry data | 20Hz |
+| `/imu` | sensor_msgs/Imu | publish | IMU data | 20Hz |
+| `/PowerVoltage` | std_msgs/Float32 | publish | Battery voltage | 20Hz |
+| `/current_data` | std_msgs/Float32MultiArray | publish | Three-channel current | ~5-6Hz |
+| `/cmd_vel_web` | geometry_msgs/Twist | subscribe | Web velocity command | 40Hz |
+| `/web/cruise_cmd` | geometry_msgs/Twist | subscribe | Cruise control target speed | - |
+| `/web/cruise_enable` | std_msgs/Bool | subscribe | Cruise on/off | - |
+| `/web/cruise_status` | std_msgs/String | publish | Cruise status | - |
+| `/cmd_vel` | geometry_msgs/Twist | publish | Final motor velocity | 40Hz |
+| `/web/estop` | std_msgs/Bool | subscribe | Emergency stop | - |
+| `/web/heartbeat` | std_msgs/Empty | subscribe | Web heartbeat | 1Hz |
+| `/web/control_status` | std_msgs/String | publish | Control status | - |
 
 ## Debug Commands
 
@@ -111,13 +150,15 @@ rostopic echo /current_data
 rostopic echo /web/control_status
 rostopic echo /web/cruise_status
 
-# Send cruise command
-rostopic pub /web/cruise_cmd geometry_msgs/Twist '{linear: {x: 0.5}}'
-
 # Check topic rates
 rostopic hz /odom
 rostopic hz /imu
 rostopic hz /current_data
+
+# Send cruise command
+rostopic pub /web/cruise_cmd geometry_msgs/Twist '{linear: {x: 0.5}}'
+rostopic pub /web/cruise_enable std_msgs/Bool '{data: true}'
+rostopic pub /web/cruise_enable std_msgs/Bool '{data: false}'
 
 # Serial device check
 cat /dev/ttyCH343USB0
@@ -126,11 +167,12 @@ cat /dev/ttyUSB1
 
 ## Web Control Safety
 
-`cmd_vel_web_adapter.py` implements three layers of protection:
+`cmd_vel_web_adapter.py` implements multiple layers of protection:
 1. **Command timeout**: 0.5s no new command → stop
 2. **Heartbeat timeout**: 1.0s no heartbeat → stop
 3. **Speed limiting**: Configurable max linear/angular velocities
 4. **E-stop**: Latched stop via `/web/estop`
+5. **Cruise priority**: Joystick doesn't override active cruise mode
 
 ## CSV Output Format
 
@@ -150,34 +192,7 @@ timestamp,frame,x,y,z,vx,vy,vz,ax,ay,az,gx,gy,gz,voltage,current0,current1,curre
 | 3 | shaft_eccentric | Motor shaft eccentricity |
 | 4 | voltage_low | Low battery voltage |
 
-### Data Collection Flow
-
-Two data sources:
-- Base controller serial → `/odom`, `/imu`, `/PowerVoltage` (13 channels, 20Hz)
-- Current sensor serial → `/current_data` (3 channels, 20Hz)
-
-**Approach 1: One-shot launch**
-```bash
-# Starts: base + current_reader + data_collector
-roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=0
-```
-
-**Approach 2: Separate terminals**
-```bash
-# Terminal 1: Start base
-roslaunch turn_on_wheeltec_robot turn_on_wheeltec_robot.launch
-
-# Terminal 2: Start current reader
-rosrun turn_on_wheeltec_robot current_reader.py
-
-# Terminal 3: Start data collector
-rosrun turn_on_wheeltec_robot data_collector.py
-
-# Terminal 4: Start web control (for moving the robot)
-roslaunch turn_on_wheeltec_robot web_control.launch
-```
-
-**Fault labels**:
+### Fault Data Collection Commands
 ```bash
 roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=0  # normal
 roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=1  # drive_fault
@@ -214,6 +229,9 @@ python validate_dataset.py --data_dir /home/wheeltec/R550PLUS_data_collect/log
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
+| `start_base` | true | Start base robot node |
+| `start_current_reader` | true | Start current reader node |
+| `start_data_collector` | true | Start data collector node |
 | `cmd_timeout` | 0.5 | Command timeout stop threshold (s) |
 | `heartbeat_timeout` | 1.0 | Heartbeat timeout stop threshold (s) |
 | `max_linear_x` | 1.50 | Max forward/back speed |

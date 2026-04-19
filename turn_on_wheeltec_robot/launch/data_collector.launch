@@ -9,15 +9,15 @@
           3 - 电机轴偏心
           4 - 电池电压偏低
 
-        使用方法（需先启动base）：
-          # 终端1：启动base（odom, imu, PowerVoltage）
-          roslaunch turn_on_wheeltec_robot turn_on_wheeltec_robot.launch
-          # 终端2：启动数据采集（current_reader + data_collector）
+        使用方法（分开启动避免节点冲突）：
+          # 终端1：数据采集
           roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=0
+          # 终端2：Web控制（浏览器控制机器人移动）
+          roslaunch turn_on_wheeltec_robot web_control.launch start_base:=false start_current_reader:=false start_data_collector:=false
 
         滑动窗口参数（用于后续预处理）：
-          窗口长度：100点 = 1秒 @ 100Hz
-          步长：50点 = 0.5秒
+          窗口长度：100点 = 5秒 @ 20Hz
+          步长：50点 = 2.5秒
           重叠率：50%
     -->
 
