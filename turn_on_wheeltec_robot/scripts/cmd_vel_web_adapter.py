@@ -124,6 +124,7 @@ class WebCmdVelAdapter(object):
         rospy.Subscriber(self.estop_topic, Bool, self.estop_callback)
         rospy.Subscriber(self.cruise_cmd_topic, Twist, self.cruise_cmd_callback)
         rospy.Subscriber(self.odom_topic, Odometry, self.odom_callback)
+        rospy.Subscriber("/web/cruise_enable", Bool, self.cruise_enable_callback)
 
         rospy.on_shutdown(self.on_shutdown)
         self.publish_status("idle")
@@ -211,30 +212,31 @@ class WebCmdVelAdapter(object):
         self.have_cmd = True
 
     def cruise_cmd_callback(self, msg):
-        """处理巡航命令"""
+        """处理巡航命令 - 只设置目标速度，不控制巡航开关"""
         now = rospy.Time.now()
 
-        # 检查是否为零命令（取消巡航）
-        if (abs(msg.linear.x) < 0.001 and
-            abs(msg.linear.y) < 0.001 and
-            abs(msg.angular.z) < 0.001):
-            self.exit_cruise()
-            return
-
-        # 设置巡航目标
+        # 设置巡航目标（无论是否已激活）
         self.cruise_target.linear.x = self.clamp(msg.linear.x, self.max_linear_x)
         self.cruise_target.linear.y = self.clamp(msg.linear.y, self.max_linear_y)
         self.cruise_target.angular.z = self.clamp(msg.angular.z, self.max_angular_z)
 
         self.cruise_cmd_time = now
 
-        if not self.cruise_active:
-            self.enter_cruise()
-
         rospy.loginfo("Cruise target set: vx=%.2f vy=%.2f wz=%.2f",
                      self.cruise_target.linear.x,
                      self.cruise_target.linear.y,
                      self.cruise_target.angular.z)
+
+    def cruise_enable_callback(self, msg):
+        """处理巡航使能/禁用"""
+        if msg.data:
+            if not self.cruise_active:
+                self.enter_cruise()
+                rospy.loginfo("Cruise enabled via /web/cruise_enable")
+        else:
+            if self.cruise_active:
+                self.exit_cruise()
+                rospy.loginfo("Cruise disabled via /web/cruise_enable")
 
     def odom_callback(self, msg):
         """获取当前实际速度"""

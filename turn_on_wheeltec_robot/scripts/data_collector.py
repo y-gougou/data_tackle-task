@@ -98,10 +98,12 @@ class SyncedDataCollector:
         current_sub = message_filters.Subscriber('/current_data', Float32MultiArray)
 
         # 同步器配置：队列大小10，时间容差0.02秒
+        # allow_headerless=True: Float32/Float32MultiArray 没有header，自动使用ROS时间
         sync = message_filters.ApproximateTimeSynchronizer(
             [odom_sub, imu_sub, voltage_sub, current_sub],
             queue_size=10,
-            slop=self.sync_tolerance
+            slop=self.sync_tolerance,
+            allow_headerless=True
         )
         sync.registerCallback(self.synchronized_callback)
 

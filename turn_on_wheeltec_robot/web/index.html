@@ -795,6 +795,9 @@
         log("请先连接Rosbridge");
         return;
       }
+      // 先发送巡航使能命令
+      publish("/web/cruise_enable", { data: true });
+      // 再发送目标速度
       sendCruiseCommand();
       log("巡航启动: Vx=" + (parseFloat(cruiseVxSlider.value)/100).toFixed(2) +
           " Vy=" + (parseFloat(cruiseVySlider.value)/100).toFixed(2) +
@@ -802,8 +805,8 @@
     });
 
     cruiseStopBtn.addEventListener("click", () => {
-      // 发送零速度命令取消巡航
-      publish("/web/cruise_cmd", { linear: {x:0,y:0,z:0}, angular: {x:0,y:0,z:0} });
+      // 发送巡航禁用命令
+      publish("/web/cruise_enable", { data: false });
       cruiseVxSlider.value = 0;
       cruiseVySlider.value = 0;
       cruiseWzSlider.value = 0;
