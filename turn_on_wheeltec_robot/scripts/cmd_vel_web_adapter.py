@@ -183,9 +183,8 @@ class WebCmdVelAdapter(object):
         self.cruise_status_pub.publish(String(data=status))
 
     def cmd_callback(self, msg):
-        # 手动控制时自动退出巡航模式
-        if self.cruise_active:
-            self.exit_cruise()
+        # 注意：巡航模式下不退出巡航，巡航优先于手动控制
+        # 巡航模式只能通过 /web/cruise_enable:=False 或 E-stop 退出
 
         limited = Twist()
         limited.linear.x = self.shape_axis(
@@ -226,6 +225,17 @@ class WebCmdVelAdapter(object):
                      self.cruise_target.linear.x,
                      self.cruise_target.linear.y,
                      self.cruise_target.angular.z)
+
+    def cruise_enable_callback(self, msg):
+        """处理巡航使能/禁用"""
+        if msg.data:
+            if not self.cruise_active:
+                self.enter_cruise()
+                rospy.loginfo("Cruise enabled via /web/cruise_enable")
+        else:
+            if self.cruise_active:
+                self.exit_cruise()
+                rospy.loginfo("Cruise disabled via /web/cruise_enable")
 
     def cruise_enable_callback(self, msg):
         """处理巡航使能/禁用"""
