@@ -174,7 +174,7 @@ class SlidingWindowCreator:
         Returns:
             X_train, X_test, y_train, y_test
         """
-        print(f"\n时序划分（训练集 {1-test_ratio:.0%}, 测试集 {test_ratio:.0%%）...")
+        print(f"\n时序划分（训练集 {(1-test_ratio)*100:.0f}%, 测试集 {test_ratio*100:.0f}%）...")
 
         n_windows = len(self.windows_X)
         split_idx = int(n_windows * (1 - test_ratio))
@@ -303,7 +303,7 @@ def main():
     """主函数"""
     parser = argparse.ArgumentParser(description='滑动窗口分割')
     parser.add_argument('--data_path', type=str,
-                       default='/home/wheeltec/R550PLUS_data_collect/log/processed_data.csv',
+                        default=r"C:\Users\ypp\Desktop\数据集集合\0418\processed_20260419_163400.csv",
                        help='预处理后的CSV文件路径')
     parser.add_argument('--output_dir', type=str, default=None,
                        help='输出目录（默认为CSV所在目录）')

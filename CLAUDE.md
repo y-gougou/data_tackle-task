@@ -226,18 +226,43 @@ Normalization strategy:
 
 **Time Sync**: `preprocess_data.py` interpolates low-frequency channels (current ~5-6Hz) to odom timeline (20Hz).
 
+### Recommended: One-command pipeline (auto-creates directories)
+
 ```bash
-# Step 1: Preprocess (time sync / missing values / outliers / normalization)
-python preprocess_data.py --data_dir /home/wheeltec/R550PLUS_data_collect/log --pattern '*.csv' --normalize symmetric
+# Single file: auto-creates {date}_{fault_label}/raw/ and {date}_{fault_label}/processed/
+python process_pipeline.py --csv "/path/to/normal_20260419_154637.csv"
 
-# Skip time sync (for legacy data)
-python preprocess_data.py --data_dir /home/wheeltec/R550PLUS_data_collect/log --pattern '*.csv' --no_sync
+# With fault label and skip first 5 seconds
+python process_pipeline.py --csv "xxx.csv" --fault_label 1 --skip_first 5
 
-# Step 2: Create sliding windows + train/test split
-python create_sliding_windows.py --data_path /home/wheeltec/R550PLUS_data_collect/log/processed_xxx.csv
+# Batch process directory
+python process_pipeline.py --csv_dir "/path/to/datasets" --fault_label 0
+```
 
-# Step 3: Validate dataset
-python validate_dataset.py --data_dir /home/wheeltec/R550PLUS_data_collect/log
+### Directory Structure (auto-created)
+
+```
+datasets/
+└── 2026-04-19_normal/
+    ├── raw/
+    │   └── normal_20260419_154637.csv
+    └── processed/
+        ├── processed_*.csv
+        ├── X_train.npy, X_test.npy, y_train.npy, y_test.npy
+        └── validation_report.txt
+```
+
+### Manual step-by-step (alternative)
+
+```bash
+# Step 1: Preprocess
+python preprocess_data.py --data_dir /path/to/log --pattern '*.csv' --skip_first 5
+
+# Step 2: Sliding windows
+python create_sliding_windows.py --data_path /path/to/processed_xxx.csv
+
+# Step 3: Validate
+python validate_dataset.py --data_dir /path/to/log
 ```
 
 ## Web Control Parameters (web_control.launch)

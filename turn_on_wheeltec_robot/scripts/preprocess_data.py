@@ -270,24 +270,30 @@ class DataPreprocessor:
 
         for col in self.SYNC_COLUMNS:
             if col in self.raw_data.columns:
-                # 创建以 current_time 为索引的 Series
-                current_series = self.raw_data.set_index('current_time')[col].sort_index()
+                # 创建临时 DataFrame 用于插值
+                temp_df = self.raw_data[['timestamp', 'current_time', col]].copy()
+                temp_df = temp_df.dropna(subset=['current_time', col])
+                temp_df = temp_df.sort_values('current_time')
 
-                # 创建新的以 timestamp 为索引的目标 Series
-                new_index = pd.Index(odom_times, name='timestamp')
+                if len(temp_df) < 2:
+                    print(f"    {col}: 数据不足，跳过插值")
+                    continue
 
-                # 插值
-                interpolated = current_series.reindex(new_index, method='linear')
+                # 使用 numpy 插值
+                current_time_vals = temp_df['current_time'].values.astype(float)
+                current_val_vals = temp_df[col].values.astype(float)
 
-                # 填充边界值
-                interpolated = interpolated.interpolate(method='linear', limit_direction='both')
+                # 对 odom 时间进行插值
+                interpolated_vals = np.interp(
+                    odom_times,
+                    current_time_vals,
+                    current_val_vals
+                )
 
                 # 更新原始数据
-                self.raw_data[col] = interpolated.values
+                self.raw_data[col] = interpolated_vals
 
-                null_count = interpolated.isnull().sum()
-                if null_count > 0:
-                    print(f"    {col}: {null_count} 个空值已通过插值填充")
+                print(f"    {col}: 插值完成")
 
         print("  ✓ 时间戳同步完成")
 
@@ -453,13 +459,14 @@ class DataPreprocessor:
 
         print()
 
-    def process_pipeline(self, remove_outliers_flag=True, sync_flag=True):
+    def process_pipeline(self, remove_outliers_flag=True, sync_flag=True, skip_first=0):
         """
         完整预处理流程
 
         Args:
             remove_outliers_flag: 是否剔除异常值
             sync_flag: 是否进行时间戳同步
+            skip_first: 跳过前N秒数据（用于丢弃启动阶段的0值），默认0
 
         Returns:
             processed_data: 处理后的DataFrame
@@ -473,6 +480,14 @@ class DataPreprocessor:
 
         # Step 2: 初始化处理数据
         self.processed_data = self.raw_data.copy()
+
+        # Step 2.5: 跳过前N秒数据（20Hz采样率）
+        if skip_first > 0:
+            rows_to_skip = int(skip_first * 20)  # 20Hz = 20行/秒
+            original_len = len(self.processed_data)
+            self.processed_data = self.processed_data.iloc[rows_to_skip:].reset_index(drop=True)
+            print(f"\n跳过前 {skip_first} 秒数据 ({rows_to_skip} 行)")
+            print(f"  原始: {original_len} 行 → 跳过: {rows_to_skip} 行 → 剩余: {len(self.processed_data)} 行")
 
         # Step 3: 时间戳同步（可选）
         if sync_flag:
@@ -549,7 +564,7 @@ def main():
     """测试预处理模块"""
     parser = argparse.ArgumentParser(description='数据预处理')
     parser.add_argument('--data_dir', type=str,
-                       default='/home/wheeltec/R550PLUS_data_collect/log',
+                       default=r"C:\Users\ypp\Desktop\数据集集合\0418",
                        help='CSV数据目录')
     parser.add_argument('--pattern', type=str, default='*.csv',
                        help='文件名模式')
@@ -562,6 +577,8 @@ def main():
     parser.add_argument('--normalize', type=str, default='symmetric',
                        choices=['symmetric', 'mixed'],
                        help='归一化方法: symmetric=[-1,1]推荐, mixed=电压[0,1]其他[-1,1]')
+    parser.add_argument('--skip_first', type=float, default=0,
+                       help='跳过前N秒数据（用于丢弃启动阶段的0值，默认0）')
 
     args = parser.parse_args()
 
@@ -574,7 +591,8 @@ def main():
     # 执行预处理流程
     preprocessor.process_pipeline(
         remove_outliers_flag=not args.no_outlier_removal,
-        sync_flag=not args.no_sync
+        sync_flag=not args.no_sync,
+        skip_first=args.skip_first
     )
 
     # 保存处理后数据

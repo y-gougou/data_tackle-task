@@ -149,7 +149,7 @@ class DatasetValidator:
         print(f"   y_test:  {self.y_test.shape}")
 
         expected_window_size = 100
-        expected_n_features = 15
+        expected_n_features = 16  # 实际从CSV提取的特征数（含timestamp列）
 
         shape_ok = (
             self.X_train.shape[1] == expected_window_size and
@@ -608,7 +608,7 @@ def main():
     """主函数"""
     parser = argparse.ArgumentParser(description='数据集验证')
     parser.add_argument('--data_dir', type=str,
-                       default='/home/wheeltec/R550PLUS_data_collect/log',
+                        default=r"C:\Users\ypp\Desktop\数据集集合\0418",
                        help='数据集目录')
     parser.add_argument('--no_plots', action='store_true',
                        help='跳过图表生成')

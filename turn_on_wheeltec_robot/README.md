@@ -148,13 +148,50 @@ rostopic pub /web/cruise_enable std_msgs/Bool '{data: false}'
 
 采集完成后，在机器人端或本地执行：
 
-### 步骤一：预处理（时间同步/缺失值/异常值/归一化）
+### 推荐：一键处理（自动分类目录）
+
+```bash
+# 单个文件一键处理（自动创建日期+故障类型目录）
+python process_pipeline.py --csv "C:\数据集\raw\normal_20260419_154637.csv"
+
+# 指定故障标签和跳过前5秒
+python process_pipeline.py --csv "xxx.csv" --fault_label 1 --skip_first 5
+
+# 批量处理目录
+python process_pipeline.py --csv_dir "C:\数据集集合" --fault_label 0
+```
+
+---
+
+### 目录结构（自动创建）
+
+```
+数据集集合/
+└── 2026-04-19_normal/           # {日期}_{故障类型}
+    ├── raw/                      # 原始CSV
+    │   └── normal_20260419_154637.csv
+    └── processed/                # 处理后数据
+        ├── processed_*.csv
+        ├── X_train.npy, X_test.npy, y_train.npy, y_test.npy
+        ├── *_info.pkl, *_norm_params.pkl
+        └── validation_report.txt
+```
+
+### 手动分步处理（备选）
+
+#### 步骤一：预处理（时间同步/缺失值/异常值/归一化）
 
 ```bash
 python ~/ml_robot_ws/src/turn_on_wheeltec_robot/scripts/preprocess_data.py \
     --data_dir /home/wheeltec/R550PLUS_data_collect/log \
     --pattern '*.csv' \
     --normalize symmetric
+
+# 跳过前5秒数据（用于丢弃启动阶段的0值）
+python ~/ml_robot_ws/src/turn_on_wheeltec_robot/scripts/preprocess_data.py \
+    --data_dir /home/wheeltec/R550PLUS_data_collect/log \
+    --pattern '*.csv' \
+    --skip_first 5
 
 # 跳过时间同步（兼容旧数据格式）
 python ~/ml_robot_ws/src/turn_on_wheeltec_robot/scripts/preprocess_data.py \
@@ -167,7 +204,7 @@ python ~/ml_robot_ws/src/turn_on_wheeltec_robot/scripts/preprocess_data.py \
 - `processed_*.csv` — 处理后的数据
 - `*_norm_params.pkl` — 归一化参数
 
-### 步骤二：滑动窗口分割
+#### 步骤二：滑动窗口分割
 
 ```bash
 python ~/ml_robot_ws/src/turn_on_wheeltec_robot/scripts/create_sliding_windows.py \
@@ -179,7 +216,7 @@ python ~/ml_robot_ws/src/turn_on_wheeltec_robot/scripts/create_sliding_windows.p
 - `y_train.npy`, `y_test.npy` — 标签
 - `*_info.pkl` — 数据集信息
 
-### 步骤三：验证数据集
+#### 步骤三：验证数据集
 
 ```bash
 python ~/ml_robot_ws/src/turn_on_wheeltec_robot/scripts/validate_dataset.py \
@@ -358,6 +395,7 @@ turn_on_wheeltec_robot/
 │   ├── preprocess_data.py          # 数据预处理
 │   ├── create_sliding_windows.py   # 滑动窗口分割
 │   ├── validate_dataset.py          # 数据集验证
+│   ├── process_pipeline.py          # 一键处理流水线（推荐）
 │   └── web_dashboard_server.py      # Web页面服务
 ├── web/
 │   └── index.html                  # Web控制页面（含巡航UI）
