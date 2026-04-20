@@ -76,7 +76,7 @@
 |------|------|------|
 | 0 | normal | 正常状态 |
 | 1 | drive_fault | 驱动异常（单轮堵转） |
-| 2 | hub_loss | 轮毂丢失/损坏 |
+| 2 | wheel_slip | 轮子打滑/损坏 |
 | 3 | shaft_eccentric | 电机轴偏心 |
 | 4 | voltage_low | 电池电压偏低 |
 
@@ -108,7 +108,7 @@ roslaunch turn_on_wheeltec_robot web_control.launch start_base:=false start_curr
 ```bash
 roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=0  # 正常
 roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=1  # 驱动异常
-roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=2  # 轮毂丢失
+roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=2  # 轮子打滑
 roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=3  # 电机轴偏心
 roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=4  # 电池低压
 ```

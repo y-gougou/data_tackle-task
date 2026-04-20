@@ -44,7 +44,7 @@ class DataPipeline:
     LABEL_MAP = {
         0: 'normal',
         1: 'drive_fault',
-        2: 'hub_loss',
+        2: 'wheel_slip',
         3: 'shaft_eccentric',
         4: 'voltage_low'
     }
@@ -92,7 +92,7 @@ class DataPipeline:
             return 0
         elif 'drive_fault' in filename_lower or 'drive' in filename_lower:
             return 1
-        elif 'hub_loss' in filename_lower or 'hub' in filename_lower:
+        elif 'wheel_slip' in filename_lower or 'hub' in filename_lower:
             return 2
         elif 'shaft' in filename_lower or 'eccentric' in filename_lower:
             return 3
@@ -247,7 +247,7 @@ def main():
     parser.add_argument('--csv_dir', type=str,
                        help='CSV目录路径（批量处理）')
     parser.add_argument('--fault_label', type=int, choices=[0,1,2,3,4],
-                       help='故障标签（0=normal, 1=drive_fault, 2=hub_loss, 3=shaft_eccentric, 4=voltage_low）')
+                       help='故障标签（0=normal, 1=drive_fault, 2=wheel_slip, 3=shaft_eccentric, 4=voltage_low）')
     parser.add_argument('--output', type=str,
                        help='输出目录（默认自动生成）')
     parser.add_argument('--skip_first', type=float, default=5,

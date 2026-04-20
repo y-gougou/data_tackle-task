@@ -17,7 +17,7 @@ R550PLUS 三全向轮机器人数据采集节点
 故障标签：
   0 - 正常状态
   1 - 驱动异常（单轮堵转）
-  2 - 轮毂丢失
+  2 - 轮子打滑
   3 - 电机轴偏心
   4 - 电池电压偏低
 
@@ -42,7 +42,7 @@ class DataCollector:
     FAULT_NAMES = {
         0: 'normal',
         1: 'drive_fault',
-        2: 'hub_loss',
+        2: 'wheel_slip',
         3: 'shaft_eccentric',
         4: 'voltage_low'
     }

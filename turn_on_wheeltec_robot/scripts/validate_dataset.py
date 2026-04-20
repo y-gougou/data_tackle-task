@@ -56,7 +56,7 @@ class DatasetValidator:
     LABEL_NAMES = {
         0: 'normal',
         1: 'drive_fault',
-        2: 'hub_loss',
+        2: 'wheel_slip',
         3: 'shaft_eccentric',
         4: 'voltage_low'
     }

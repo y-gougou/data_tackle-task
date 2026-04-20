@@ -198,7 +198,7 @@ Fields:
 |-------|------|-------------|
 | 0 | normal | Normal state |
 | 1 | drive_fault | Drive fault (single wheel blockage) |
-| 2 | hub_loss | Omni wheel hub loss/damage |
+| 2 | wheel_slip | Omni wheel hub loss/damage |
 | 3 | shaft_eccentric | Motor shaft eccentricity |
 | 4 | voltage_low | Low battery voltage |
 
@@ -206,7 +206,7 @@ Fields:
 ```bash
 roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=0  # normal
 roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=1  # drive_fault
-roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=2  # hub_loss
+roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=2  # wheel_slip
 roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=3  # shaft_eccentric
 roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=4  # voltage_low
 ```

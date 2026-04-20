@@ -31,7 +31,7 @@ class DataReorganizer:
         'drive_fault': 1,
         'drive': 1,
         '1': 1,
-        'hub_loss': 2,
+        'wheel_slip': 2,
         'hub': 2,
         'loss': 2,
         '2': 2,
@@ -111,7 +111,7 @@ class DataReorganizer:
             filename = os.path.basename(csv_path)
             date = self.detect_date(filename)
             label = self.detect_label(filename)
-            label_name = ['normal', 'drive_fault', 'hub_loss', 'shaft_eccentric', 'voltage_low'][label]
+            label_name = ['normal', 'drive_fault', 'wheel_slip', 'shaft_eccentric', 'voltage_low'][label]
 
             key = f"{date}_{label_name}"
             if key not in groups:
