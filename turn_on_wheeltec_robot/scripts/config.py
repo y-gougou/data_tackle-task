@@ -7,11 +7,11 @@ WHEELTEC_CONTROLLER_PORT = '/dev/wheeltec_controller'
 WHEELTEC_CONTROLLER_BAUD = 115200
 
 # 电流采集串口（4CH-Current传感器 - CH343芯片）
-CURRENT_SENSOR_PORT = '/dev/ttyUSB1'
+CURRENT_SENSOR_PORT = '/dev/ttyUSB0'
 CURRENT_SENSOR_BAUD = 115200
 
 # 高精度IMU串口（维特IMU - CP2102芯片)
-IMU_SENSOR_PORT = '/dev/ttyUSB1'
+IMU_SENSOR_PORT = '/dev/ttyUSB0'
 IMU_SENSOR_BAUD = 115200
 
 # ===== 数据帧配置 =====

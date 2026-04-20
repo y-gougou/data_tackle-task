@@ -9,7 +9,7 @@
   <arg name="web_host" default="0.0.0.0"/>
   <arg name="web_port" default="8000"/>
 
-  <arg name="current_port" default="/dev/ttyUSB1"/>
+  <arg name="current_port" default="/dev/ttyUSB0"/>
   <arg name="current_baud" default="115200"/>
 
   <arg name="data_output_dir" default="/home/wheeltec/R550PLUS_data_collect/log"/>

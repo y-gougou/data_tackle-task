@@ -30,7 +30,7 @@
           type="current_reader.py"
           output="screen"
           respawn="false">
-        <param name="port" value="/dev/ttyUSB1"/>
+        <param name="port" value="/dev/ttyUSB0"/>
         <param name="baud" value="115200"/>
         <param name="frame_id" value="current_sensor"/>
     </node>
