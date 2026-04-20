@@ -81,7 +81,7 @@ rosrun turn_on_wheeltec_robot cmd_vel_web_adapter.py
 | Device | Default Path | Baud Rate | Purpose |
 |--------|--------------|-----------|---------|
 | Base controller | `/dev/ttyCH343USB0` | 115200 | Motor control, odometry, IMU |
-| Current sensing | `/dev/ttyUSB0` | 115200 | Three-channel current reading |
+| Current sensing | `/dev/ttyUSB1` | 115200 | Three-channel current reading |
 
 ### Internal Sampling vs ROS Publishing
 
@@ -162,7 +162,7 @@ rostopic pub /web/cruise_enable std_msgs/Bool '{data: false}'
 
 # Serial device check
 cat /dev/ttyCH343USB0
-cat /dev/ttyUSB0
+cat /dev/ttyUSB1
 ```
 
 ## Web Control Safety
