@@ -16,7 +16,7 @@
 | 数据源 | 串口 | 话题 | 通道数 | 频率 |
 |--------|------|------|--------|------|
 | 底盘控制器 | `/dev/ttyCH343USB0` | `/odom`, `/imu`, `/PowerVoltage` | 13通道 | 20Hz |
-| 电流传感器 | `/dev/ttyUSB1` | `/current_data` | 3通道 | ~5-6Hz |
+| 电流传感器 | `/dev/ttyUSB0` | `/current_data` | 3通道 | ~5-6Hz |
 
 **内部采样频率**：IMU 芯片 MPU6050 内部采样 100Hz，但 ROS 发布频率为 20Hz。
 
@@ -35,7 +35,7 @@
 ## 系统结构
 
 ```
-串口设备 1 (ttyCH343USB0)          串口设备 2 (ttyUSB1)
+串口设备 1 (ttyCH343USB0)          串口设备 2 (ttyUSB0)
         │                                    │
         ▼                                    ▼
 ┌───────────────┐                  ┌─────────────────┐
@@ -361,9 +361,9 @@ ls -la /home/wheeltec/R550PLUS_data_collect/log/
 ### 1. 电流数据为空
 ```bash
 rostopic echo /current_data
-ls -l /dev/ttyUSB1
+ls -l /dev/ttyUSB0
 ```
-检查串口 `/dev/ttyUSB1` 是否存在，波特率是否正确。
+检查串口 `/dev/ttyUSB0` 是否存在，波特率是否正确。
 
 ### 2. 数据采集频率低
 底盘控制器固定输出 20Hz，无法更改。预处理脚本已按 20Hz 校准。
@@ -419,7 +419,7 @@ turn_on_wheeltec_robot/
 ┌─────────────────────────────────────────────────────────────┐
 │  采集前准备                                                │
 │  - 机器人开机                                              │
-│  - 确认串口正常 /dev/ttyUSB1, /dev/ttyCH343USB0           │
+│  - 确认串口正常 /dev/ttyUSB0, /dev/ttyCH343USB0           │
 └─────────────────────────────────────────────────────────────┘
                             │
                             ▼
