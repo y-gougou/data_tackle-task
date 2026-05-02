@@ -1,0 +1,1371 @@
+# R550PLUS 三全向轮机器人 - 数据采集实现说明
+
+## 一、系统架构概述
+
+数据采集系统由两个独立的ROS节点组成，通过ROS话题机制进行数据交换：
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           硬件层                                         │
+├─────────────────────────────────────────────────────────────────────────┤
+│  底盘控制器 (STM32)              │  电流检测板 (独立MCU)                   │
+│  /dev/ttyCH343USB0 @ 115200     │  /dev/ttyUSB0 @ 115200                 │
+│  - 里程计 (odom) 20Hz            │  - 三通道电流 (current) ~5-6Hz          │
+│  - IMU数据 20Hz                  │                                        │
+│  - 电池电压 20Hz                  │                                        │
+└─────────────────────────────────────────────────────────────────────────┘
+           │                                    │
+           ▼                                    ▼
+┌─────────────────────────┐          ┌─────────────────────────┐
+│   串口协议解析            │          │   串口协议解析            │
+│ wheeltec_robot.cpp (C++) │          │ current_reader.py        │
+│ 发布: /odom, /imu,       │          │ 发布: /current_data       │
+│       /PowerVoltage     │          │                          │
+└───────────┬─────────────┘          └───────────┬─────────────┘
+            │                                    │
+            └──────────────┬─────────────────────┘
+                           ▼
+        ┌──────────────────────────────────────────┐
+        │         ROS Topic 总线                    │
+        │  /odom (20Hz)  → data_collector.py 触发   │
+        │  /imu (20Hz)   → 最新值缓存               │
+        │  /PowerVoltage (20Hz) → 最新值缓存        │
+        │  /current_data (~5-6Hz) → 最新值缓存      │
+        └─────────────────┬────────────────────────┘
+                          ▼
+        ┌──────────────────────────────────────────┐
+        │         CSV 文件存储                      │
+        │  /home/wheeltec/R550PLUS_data_collect/log │
+        └──────────────────────────────────────────┘
+```
+
+## 二、电流数据采集 (current_reader.py)
+
+### 2.1 硬件通信
+
+电流传感器通过独立MCU采集三通道电流数据，通过USB转串口与ROS通信：
+
+| 参数 | 值 |
+|------|-----|
+| 设备路径 | `/dev/ttyUSB0` |
+| 波特率 | 115200 |
+| 数据格式 | ASCII文本 |
+| 协议 | `$CURRENT,ch0,ch1,ch2*XX\r\n` |
+
+### 2.2 协议格式解析
+
+数据帧格式（参考[current_reader.py:64-124](turn_on_wheeltec_robot/scripts/current_reader.py#L64-L124)）：
+
+```
+$CURRENT,-0.0391,-0.0287,-0.1038*7E\r\n
+│        │      │      │      │    │
+│        │      │      │      │    └── 16进制校验和 (XOR checksum)
+│        │      │      │      └── 分隔符 *
+│        │      │      └── 通道2电流值
+│        │      └── 通道1电流值
+│        └── 通道0电流值
+```
+
+### 2.3 校验和计算
+
+校验和为从`$`到`*`（不包含`*`）之间所有字符的XOR值：
+
+```python
+calc_checksum = 0
+for i in range(data_end):
+    calc_checksum ^= ord(line[i])
+```
+
+### 2.4 发布话题
+
+解析成功后，通过ROS发布`/current_data`话题：
+
+```python
+msg = Float32MultiArray()
+msg.data = [ch0, ch1, ch2]  # 三个电流通道
+self.pub.publish(msg)
+```
+
+注意：电流传感器以100Hz循环读取，但有效数据约5-6Hz（取决于传感器硬件输出频率）。
+
+## 三、主数据采集节点 (data_collector.py)
+
+### 3.1 采集触发机制
+
+[data_collector.py:103-110](turn_on_wheeltec_robot/scripts/data_collector.py#L103-L110) 中的`odom_callback`是数据记录的唯一触发源：
+
+```python
+def odom_callback(self, msg):
+    # 更新时间戳
+    self.latest_data['odom'] = msg
+    self.latest_data['odom_time'] = msg.header.stamp.to_sec()
+    # 触发数据记录
+    self.record_data()
+```
+
+**设计思路**：
+- `/odom`以20Hz稳定输出，作为系统时钟基准
+- 每次收到`/odom`消息时，触发记录一行数据
+- 其他话题数据使用"最新值"策略（不主动触发）
+
+### 3.2 话题订阅关系
+
+[data_collector.py:94-101](turn_on_wheeltec_robot/scripts/data_collector.py#L94-L101)：
+
+| 话题 | 类型 | 回调函数 | 作用 |
+|------|------|----------|------|
+| `/odom` | nav_msgs/Odometry | `odom_callback` | **主触发源**，每消息触发一次记录 |
+| `/imu` | sensor_msgs/Imu | `imu_callback` | 更新IMU最新值（线性加速度、角速度） |
+| `/PowerVoltage` | std_msgs/Float32 | `voltage_callback` | 更新电池电压最新值 |
+| `/current_data` | std_msgs/Float32MultiArray | `current_callback` | 更新三通道电流最新值 |
+
+### 3.3 记录机制
+
+[record_data()](turn_on_wheeltec_robot/scripts/data_collector.py#L127-L215) 方法的核心逻辑：
+
+1. **时间基准**：使用`/odom`的`header.stamp`作为主时间戳
+2. **数据填充**：
+   - `/odom`数据直接使用（位置x,y,z；速度vx,vy,vz）
+   - `/imu`使用最新缓存值（加速度ax,ay,az；角速度gx,gy,gz）
+   - `/PowerVoltage`使用最新缓存值
+   - `/current_data`使用最新缓存值（三通道）
+
+3. **缺失值处理**：
+   - 若某话题尚未收到数据，使用默认值（0）
+   - 记录各话题的**独立时间戳**，供后续预处理同步
+
+### 3.4 CSV输出格式
+
+CSV文件字段定义（[data_collector.py:233-243](turn_on_wheeltec_robot/scripts/data_collector.py#L233-L243)）：
+
+```csv
+timestamp,frame,odom_time,imu_time,voltage_time,current_time,
+x,y,z,vx,vy,vz,ax,ay,az,gx,gy,gz,
+voltage,current0,current1,current2,fault_label
+```
+
+| 字段组 | 字段名 | 说明 | 数据来源 |
+|--------|--------|------|----------|
+| 时间戳 | timestamp | 主时间戳（/odom基准） | odom.header.stamp |
+| | odom_time | /odom话题原始时间 | odom.header.stamp |
+| | imu_time | /imu话题原始时间 | imu.header.stamp |
+| | voltage_time | /PowerVoltage时间 | rospy.Time.now() |
+| | current_time | /current_data时间 | rospy.Time.now() |
+| 位置 | x, y, z | 里程计位置 | odom.pose.pose.position |
+| 速度 | vx, vy, vz | 里程计速度 | odom.twist.twist.linear |
+| 加速度 | ax, ay, az | IMU线性加速度 | imu.linear_acceleration |
+| 角速度 | gx, gy, gz | IMU角速度 | imu.angular_velocity |
+| 电压 | voltage | 电池电压 | PowerVoltage.data |
+| 电流 | current0,1,2 | 三通道电流 | current_data.data[0,1,2] |
+| 标签 | fault_label | 故障类型标记 | launch参数传入 |
+
+### 3.5 文件命名规则
+
+```python
+filename = f"{fault_name}_{timestamp}.csv"
+# 例如: normal_20260419_154637.csv
+```
+
+## 四、启动方式
+
+### 4.1 数据采集 launch 文件
+
+参考 [data_collector.launch](turn_on_wheeltec_robot/launch/data_collector.launch)：
+
+```xml
+<!-- 启动电流读取节点 -->
+<node name="current_reader"
+      pkg="turn_on_wheeltec_robot"
+      type="current_reader.py"
+      output="screen">
+    <param name="port" value="/dev/ttyUSB0"/>
+    <param name="baud" value="115200"/>
+</node>
+
+<!-- 启动数据采集节点 -->
+<node name="data_collector"
+      pkg="turn_on_wheeltec_robot"
+      type="data_collector.py"
+      output="screen">
+    <param name="fault_label" value="$(arg fault_label)"/>
+    <param name="output_dir" value="/home/wheeltec/R550PLUS_data_collect/log"/>
+</node>
+```
+
+### 4.2 使用命令
+
+```bash
+# 正常状态数据采集
+roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=0
+
+# 驱动异常数据采集
+roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=1
+
+# 轮子打滑数据采集
+roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=2
+
+# 电机轴偏心数据采集
+roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=3
+
+# 电池电压偏低数据采集
+roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=4
+```
+
+## 五、频率差异与时间同步
+
+### 5.1 频率对比
+
+| 数据源 | 发布频率 | 说明 |
+|--------|----------|------|
+| /odom | 20Hz | 底盘控制器直接输出，固件20Hz降采样 |
+| /imu | 20Hz | 固件内部100Hz采样，20Hz发布 |
+| /PowerVoltage | 20Hz | 与odom同步 |
+| /current_data | ~5-6Hz | 独立电流传感器，硬件限制 |
+
+### 5.2 为什么要记录独立时间戳
+
+由于各话题频率不同，到达时间也不同：
+
+```
+时间轴 (ms):  0    50   100  150  200  250  300  ...
+/odom:        ✓         ✓         ✓         ✓
+/imu:         ✓         ✓         ✓         ✓
+/current:           ✓           ✓           ✓
+```
+
+`/current_data`约5-6Hz意味着：
+- 在odom的20Hz时间轴上（约50ms间隔），电流数据可能每2-4个odom周期才更新一次
+- 如果直接使用最新值，会导致大量重复值
+
+### 5.3 预处理时的同步方案
+
+[preprocess_data.py:234-298](turn_on_wheeltec_robot/scripts/preprocess_data.py#L234-L298) 中的`sync_timestamps()`使用**线性插值**将低频电流数据对齐到20Hz时间轴：
+
+```python
+# 对电流通道进行插值
+interpolated_vals = np.interp(
+    odom_times,           # 目标时间轴 (20Hz)
+    current_time_vals,    # 电流实际时间轴 (~5-6Hz)
+    current_val_vals      # 电流值
+)
+```
+
+插值效果示意：
+
+```
+原始电流数据:  ●       ●       ●       ●
+                ╱ ╲   ╱ ╲   ╱ ╲   ╱ ╲
+时间轴上的电流: ●───●───●───●───●───●───●
+(20Hz对齐)      ↑   ↑   ↑   ↑   ↑   ↑
+```
+
+## 六、故障标签定义
+
+| 标签 | 名称 | 描述 | 采集方法 |
+|------|------|------|----------|
+| 0 | normal | 正常状态 | 正常运行 |
+| 1 | drive_fault | 驱动异常 | 单轮堵转，手动阻挡 |
+| 2 | wheel_slip | 轮子打滑 | 轮毂脱落/损坏 |
+| 3 | shaft_eccentric | 电机轴偏心 | 偏心负载运行 |
+| 4 | voltage_low | 电压偏低 | 低电量运行 |
+
+## 七、关键设计决策
+
+### 7.1 为什么不用 message_filters 同步？
+
+代码注释说明（[data_collector.py:88-89](turn_on_wheeltec_robot/scripts/data_collector.py#L88-L89)）：采用了"独立订阅"而非`message_filters.TimeSynchronizer`。
+
+**原因**：
+- `/current_data`频率较低(~5-6Hz)，与20Hz的odom难以同步
+- 同步策略会导致大量数据被丢弃
+- 记录独立时间戳，让预处理阶段有更大灵活性
+
+### 7.2 为什么用 latest_data 缓存？
+
+采用"最新值"策略的原因：
+- 避免因频率不匹配导致的数据丢失
+- 确保每行CSV都能包含所有通道的数据
+- 预处理阶段再进行精确时间同步
+
+### 7.3 默认值策略
+
+首次启动时，某些话题可能尚未收到数据（特别是启动初期的几ms）：
+
+```python
+if imu is None:
+    imu_data = {'x': 0, 'y': 0, 'z': 0, 'gx': 0, 'gy': 0, 'gz': 0}
+```
+
+实际运行中这种情况极少发生，因为20Hz的周期远大于启动延迟。
+
+---
+
+# Web遥控面板实现说明
+
+## 八、系统架构概述
+
+Web遥控面板采用**浏览器-ROS混合架构**，通过WebSocket与ROS通信，实现跨平台的机器人遥控：
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              浏览器端 (Web Dashboard)                        │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  HTML/CSS/JavaScript 单页应用                                          │   │
+│  │  - 虚拟摇杆 (Touch)     - Xbox手柄支持                                │   │
+│  │  - 键盘控制 (WASD/QE)   - 实时曲线显示                                 │   │
+│  │  - 定速巡航控制          - 数据采集管理                                 │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────┘
+                    │                                        ▲
+                    ▼                                        │
+         ┌──────────────────────┐              ┌──────────────────────┐
+         │   WebSocket 协议      │              │   HTTP REST API       │
+         │   (Rosbridge)         │              │   (文件下载)           │
+         └──────────┬───────────┘              └──────────┬───────────┘
+                    │                                        │
+┌───────────────────┴────────────────────────────────────────┴───────────────┐
+│                           ROS 网络                                          │
+│                                                                             │
+│  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐       │
+│  │ web_cmd_vel_    │    │ rosbridge_      │    │ web_dashboard_  │       │
+│  │ adapter.py      │◄──►│ server          │◄──►│ server.py       │       │
+│  │ (安全适配器)      │    │ (WebSocket-ROS) │    │ (HTTP静态服务)   │       │
+│  └────────┬────────┘    └─────────────────┘    └─────────────────┘       │
+│           │                                                               │
+│           ▼                                                               │
+│  ┌─────────────────────────────────────────────────────────────────┐      │
+│  │                      /cmd_vel 最终输出                             │      │
+│  └─────────────────────────────────────────────────────────────────┘      │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+## 九、核心组件
+
+### 9.1 cmd_vel_web_adapter.py - 安全适配器
+
+位于 [cmd_vel_web_adapter.py](turn_on_wheeltec_robot/scripts/cmd_vel_web_adapter.py)，是Web控制的核心枢纽：
+
+**功能职责**：
+1. 接收Web端命令 (`/cmd_vel_web`)
+2. 应用安全限制（速度限制、死区、响应曲线）
+3. 心跳超时检测
+4. 急停处理
+5. **定速巡航PID闭环控制**
+
+**订阅的话题**：
+
+| 话题 | 类型 | 作用 |
+|------|------|------|
+| `/cmd_vel_web` | Twist | Web端原始命令 |
+| `/web/heartbeat` | Empty | Web心跳信号 |
+| `/web/estop` | Bool | 急停信号 |
+| `/web/cruise_cmd` | Twist | 巡航目标速度 |
+| `/web/cruise_enable` | Bool | 巡航使能 |
+| `/odom` | Odometry | 当前实际速度（用于PID反馈） |
+
+**发布的话题**：
+
+| 话题 | 类型 | 作用 |
+|------|------|------|
+| `/cmd_vel` | Twist | 最终输出到底盘 |
+| `/web/control_status` | String | 控制状态 |
+| `/web/cruise_status` | String | 巡航状态（目标 vs 实际） |
+
+### 9.2 响应曲线处理
+
+[shape_axis()](turn_on_wheeltec_robot/scripts/cmd_vel_web_adapter.py#L150-L165) 方法实现非线性响应曲线：
+
+```python
+def shape_axis(self, value, limit, deadband, min_ratio):
+    magnitude = abs(value)
+    if magnitude <= deadband:
+        return 0.0
+
+    normalized = (magnitude - deadband) / (1 - deadband)
+    shaped = min_ratio + (1 - min_ratio) * pow(normalized, self.response_exponent)
+    return shaped * limit if value >= 0 else -shaped * limit
+```
+
+**响应曲线示意**（`response_exponent=0.7`, `min_ratio=0.2`）：
+
+```
+输出
+ 1.0 ┤                    ╱─── 最终输出
+     │               ╱────
+ 0.2 ┤────────────────────────────
+     │    ╱
+ 0.0 ┼──┴────────────────────────── 输入
+     0  deadband                  1.0
+```
+
+- **死区**：小于死区阈值视为零
+- **最小输出比**：低输入时也有基本响应（避免完全无法控制）
+- **指数曲线**：通过`response_exponent`调整曲线形状，越小越激进
+
+### 9.3 定速巡航 - PID闭环控制
+
+巡航控制采用**三通道独立PID**：
+
+```python
+# 每轴一个PID控制器
+self.pid_x = PIDController(kp=0.8, ki=0.1, kd=0.3, output_limit=self.max_linear_x)
+self.pid_y = PIDController(kp=0.8, ki=0.1, kd=0.3, output_limit=self.max_linear_y)
+self.pid_angular = PIDController(kp=1.0, ki=0.05, kd=0.2, output_limit=self.max_angular_z)
+```
+
+**PID控制循环**（10Hz）：
+
+```
+         ┌──────────────────────────────────────┐
+         │                                      │
+Target ──► ──►  PID  ──►  cmd  ──►  Robot     │
+    │              Controller              │     │
+    │                                     ▼     │
+    │         ┌──────────────┐      /odom      │
+    └─────────┤  Error =     │◄─────────────────┘
+              │ Target - Actual
+              └──────────────┘
+```
+
+**巡航控制规则**：
+- `/web/cruise_enable:=True` → 激活巡航模式
+- `/web/cruise_cmd` → 设置目标速度（不自动激活）
+- **手柄/键盘输入不会退出巡航模式**
+- 退出巡航的唯一方式：`/web/cruise_enable:=False` 或 **急停**
+
+### 9.4 安全机制
+
+| 机制 | 阈值 | 行为 |
+|------|------|------|
+| 指令超时 | 0.5s | 无新指令 → 停车 |
+| 心跳超时 | 1.0s | 无心跳 → 停车 |
+| 急停 | 即时 | 锁定停车，需手动解除 |
+| 速度限制 | 可配置 | 限制最大线速度/角速度 |
+
+## 十、web_dashboard_server.py - HTTP服务器
+
+位于 [web_dashboard_server.py](turn_on_wheeltec_robot/scripts/web_dashboard_server.py)：
+
+**功能**：
+1. 提供Web静态文件服务（HTML/CSS/JS）
+2. CSV文件列表API (`/api/data/list`)
+3. CSV文件下载API (`/api/data/download/<filename>`)
+
+**REST API**：
+
+| 端点 | 方法 | 功能 |
+|------|------|------|
+| `/api/data/list` | GET | 列出所有CSV文件 |
+| `/api/data/download/<filename>` | GET | 下载指定CSV文件 |
+
+```python
+# 文件列表API响应格式
+{
+    "files": [
+        {"name": "normal_20260419_154637.csv", "size": 12345, "mtime": 1713520000},
+        ...
+    ],
+    "dir": "/home/wheeltec/R550PLUS_data_collect/log"
+}
+```
+
+## 十一、Web前端 (index.html)
+
+位于 [web/index.html](turn_on_wheeltec_robot/web/index.html)，纯前端单页应用：
+
+### 11.1 输入方式
+
+| 输入方式 | 按键/控制 | 功能 |
+|----------|----------|------|
+| **虚拟摇杆** | 触摸拖动 | 前后=速度，左右=转向 |
+| **键盘** | W/S/↑/↓ | 前进/后退 |
+| | A/D/←/→ | 左转/右转 |
+| | Q/E | 左横移/右横移 |
+| | Space | 停车 |
+| | Shift(按住) | Turbo 1.5× |
+| **Xbox手柄** | 左摇杆 | 前后/左右 |
+| | 右摇杆X | 横移 |
+| | LT/RT扳机 | 前进/后退（并行） |
+| | A | 停车 |
+| | B | 急停 |
+| | X | 解除急停 |
+| | Y | Toggle Turbo |
+| | LB/RB | 速度 -0.1× / +0.1× |
+
+### 11.2 实时监控
+
+- 电池电压显示
+- 实测线速度/角速度
+- 三通道电流实时值
+- IMU角速度Z
+- 里程计X/Y位置
+
+### 11.3 实时曲线
+
+Canvas绑制的滚动图表：
+- **速度曲线**：Vx(蓝)、Vy(绿)、ωz(橙)
+- **电流曲线**：I0(红)、I1(紫)、I2(黄)
+
+### 11.4 定速巡航控制面板
+
+- 三个滑块：Vx、Vy、Wz
+- 启动/停止巡航按钮
+- 目标值 vs 实测值对比显示
+
+### 11.5 数据采集管理
+
+- 开始/停止录制按钮
+- 录制标签输入
+- 录制状态显示（采样数、时长、频率）
+- CSV文件列表与下载
+
+## 十二、通信协议
+
+### 12.1 WebSocket通信（Rosbridge）
+
+浏览器通过WebSocket与Rosbridge通信，发送JSON格式消息：
+
+```javascript
+// 发布命令
+{"op": "publish", "topic": "/cmd_vel_web", "msg": {"linear": {"x": 0.5, "y": 0, "z": 0}, "angular": {"x": 0, "y": 0, "z": 0}}}
+
+// 订阅话题
+{"op": "subscribe", "topic": "/odom", "type": "nav_msgs/Odometry", "queue_length": 1}
+
+// 心跳
+{"op": "publish", "topic": "/web/heartbeat", "msg": {}}
+```
+
+### 12.2 话题消息频率
+
+| 话题 | 频率 | 说明 |
+|------|------|------|
+| `/cmd_vel_web` | 30Hz | Web端发送 |
+| `/web/heartbeat` | 4Hz | 心跳保活 |
+| `/web/cruise_cmd` | 实时 | 巡航目标速度 |
+| `/web/cruise_enable` | 按需 | 巡航使能 |
+
+## 十三、启动方式
+
+### 13.1 完整启动
+
+```bash
+# 同时启动所有组件（数据采集 + Web控制）
+roslaunch turn_on_wheeltec_robot web_control.launch
+
+# 分开启动（避免节点名冲突）
+# 终端1：数据采集
+roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=0
+# 终端2：Web控制
+roslaunch turn_on_wheeltec_robot web_control.launch start_base:=false start_current_reader:=false start_data_collector:=false
+```
+
+### 13.2 启动参数
+
+参考 [web_control.launch](turn_on_wheeltec_robot/launch/web_control.launch)：
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `start_base` | true | 启动底盘节点 |
+| `start_current_reader` | true | 启动电流读取 |
+| `start_data_collector` | true | 启动数据采集 |
+| `rosbridge_port` | 9090 | Rosbridge WebSocket端口 |
+| `web_port` | 8000 | HTTP服务器端口 |
+| `max_linear_x` | 1.50 | 最大前进速度 m/s |
+| `max_linear_y` | 1.00 | 最大横移速度 m/s |
+| `max_angular_z` | 3.75 | 最大角速度 rad/s |
+| `cmd_timeout` | 0.5 | 指令超时秒数 |
+| `heartbeat_timeout` | 1.0 | 心跳超时秒数 |
+
+### 13.3 访问方式
+
+- **Web面板**：机器人IP:8000（如 `http://192.168.1.100:8000`）
+- **Rosbridge**：机器人IP:9090（如 `ws://192.168.1.100:9090`）
+
+## 十四、关键设计决策
+
+### 14.1 为什么用Rosbridge而不是roslib？
+
+- **浏览器兼容性**：WebSocket原生支持好
+- **性能**：Rosbridge协议更轻量
+- **生态**：roslib需要引入较大JS库
+
+### 14.2 为什么用adapter适配器模式？
+
+- **不修改原有底盘节点**：保持 `wheeltec_robot_node` 独立
+- **添加安全层**：在适配器中实现所有安全检查
+- **职责分离**：底盘节点专注运动控制，适配器专注安全
+
+### 14.3 巡航控制为什么用PID而不是直接开环？
+
+开环巡航（直接发送目标速度）的问题：
+- 机器人负载变化时速度不稳定
+- 电池电量低时速度变慢
+- 地面摩擦力变化影响大
+
+PID闭环控制通过**实际速度反馈**自动调节输出，保持目标速度恒定。
+
+### 14.4 为什么要心跳机制？
+
+浏览器连接不稳定，心跳机制确保：
+- 检测连接断开
+- 机器人不会在失控状态下继续运动
+- 配合指令超时实现双重保护
+
+---
+
+# 十五、前端拓展方向（毕设任务）
+
+根据您的毕业设计任务，前端界面可从以下方向进行拓展：
+
+## 15.1 毕设任务对照分析
+
+| 毕设任务 | 当前实现 | 需拓展内容 |
+|----------|----------|------------|
+| 1. 多源传感器数据采集 | 电流、电压、IMU | 转速、振动数据采集与展示 |
+| 2. 深度神经网络模型 | 无 | 诊断结果实时推理与展示 |
+| 3. 前端UI可视化 | 基础监控面板 | 诊断结果可视化、人机交互 |
+
+## 15.2 传感器数据扩展
+
+### 当前已采集的传感器数据
+```
+/odom          → 位置 (x,y,z)、速度 (vx,vy,vz)
+/imu           → 加速度 (ax,ay,az)、角速度 (gx,gy,gz)
+/PowerVoltage  → 电池电压
+/current_data → 三通道电流
+```
+
+### 毕设要求的传感器数据（需扩展硬件）
+
+```
+传感器类型       │ 采集内容              │ 用途
+────────────────┼───────────────────────┼────────────────────
+电流传感器       │ 三通道电流 I0,I1,I2   │ 电机负载监测、堵转检测  ✓已实现
+电压传感器       │ 电池电压              │ 低电量预警              ✓已实现
+转速传感器       │ 电机转速 RPM          │ 轮子打滑、轴偏心诊断    ✗待扩展
+振动传感器       │ 振动加速度/频率       │ 机械故障诊断            ✗待扩展
+加速度传感器     │ 三轴加速度            │ 运动状态、碰撞检测      ✓已实现(IMU)
+```
+
+
+
+
+
+
+### 前端可新增的传感器展示面板
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      传感器状态监控面板                            │
+├─────────────────┬─────────────────┬─────────────────┬───────────┤
+│   电机转速 RPM   │   振动监测       │   温度监测       │  综合状态  │
+├─────────────────┼─────────────────┼─────────────────┼───────────┤
+│  电机1: 1250    │  频率: 45Hz     │  电机1: 42°C    │  ⚠ 异常   │
+│  电机2: 1248    │  加速度: 0.3g   │  电机2: 43°C    │  ⚠ 异常   │
+│  电机3: 1245    │  状态: 正常     │  电机3: 41°C    │  ✓ 正常   │
+└─────────────────┴─────────────────┴─────────────────┴───────────┘
+```
+
+## 15.3 故障诊断结果可视化
+
+### 诊断结果实时展示
+
+```javascript
+// 订阅诊断结果话题（需新建推理节点发布）
+subscribe("/diagnosis/result", "std_msgs/String");
+
+// 诊断结果数据结构示例
+{
+    "timestamp": "2026-04-21 10:30:25",
+    "fault_type": "wheel_slip",           // 故障类型
+    "confidence": 0.92,                    // 置信度 92%
+    "sensor_contribution": {               // 各传感器贡献度
+        "current": 0.45,
+        "vibration": 0.30,
+        "speed": 0.25
+    },
+    "severity": "warning",                // 严重程度: normal/warning/critical
+    "recommendation": "检测到轮子打滑，建议检查轮毂"  // 处理建议
+}
+```
+
+### 诊断结果UI设计
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                      故障诊断结果                                 │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│   ┌──────────────┐    置信度: 92%                               │
+│   │   ⚠ 轮子打滑  │    ████████████████████░░░                 │
+│   └──────────────┘                                              │
+│                                                                  │
+│   传感器贡献度:                                                  │
+│   电流 ████████████ 45%                                          │
+│   振动 ████████ 30%                                              │
+│   转速 ██████ 25%                                                │
+│                                                                  │
+│   严重程度: [警告]                                                │
+│                                                                  │
+│   处理建议: 检测到轮子打滑，建议检查轮毂连接是否松动                 │
+│                                                                  │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### 故障历史记录
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                      故障历史记录                                 │
+├──────────────────────────────────────────────────────────────────┤
+│ 时间                │ 故障类型       │ 置信度  │ 状态              │
+├──────────────────────────────────────────────────────────────────┤
+│ 2026-04-21 10:30:25 │ 轮子打滑      │ 92%    │ [未处理] [确认]   │
+│ 2026-04-21 09:15:10 │ 驱动异常      │ 87%    │ [已处理]          │
+│ 2026-04-20 16:42:33 │ 电压偏低      │ 95%    │ [已处理]          │
+│ 2026-04-20 14:20:05 │ 正常          │ 99%    │ -                 │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+## 15.4 多传感器融合数据展示
+
+### 数据融合仪表盘
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                      多传感器融合监控                              │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│   实时数据流:                                                     │
+│   ┌────────────────────────────────────────────────────────────┐ │
+│   │  电流 ────► 异常检测 ──┐                                   │ │
+│   │  转速 ────► 特征提取  ──┼──► 融合判断 ──► 故障类型输出      │ │
+│   │  振动 ────► 频域分析 ──┘                                   │ │
+│   └────────────────────────────────────────────────────────────┘ │
+│                                                                  │
+│   当前状态: [正常]  异常指数: 0.12 (阈值: 0.7)                   │
+│                                                                  │
+│   滑动窗口 (5秒): 100个样本 ────────────────────────── [暂停]   │
+│                                                                  │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### 频谱分析图（振动数据）
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                      振动频谱分析                                 │
+├──────────────────────────────────────────────────────────────────┤
+│  幅值                                                         │
+│  1.5 ┤            ┌─┐                                          │
+│      │            │ │    ┌─┐                                   │
+│  1.0 ┤            │ │    │ │                                   │
+│      │      ┌─┐   │ │    │ │         ┌─┐                      │
+│  0.5 ┤──────│ │───│ │────│ │─────────│ │────                │
+│      │      │ │   │ │    │ │         │ │                      │
+│  0.0 ┼────────────────────────────────────────────────────────  │
+│       10Hz  20Hz  30Hz  40Hz  50Hz  60Hz  70Hz  80Hz         │
+│                                                                  │
+│  峰值: 45Hz (正常范围: 40-50Hz)  ✓                             │
+│  异常频率成分: 无                                               │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+## 15.5 人机交互功能扩展
+
+### 智能报警系统
+
+```javascript
+// 报警级别与处理
+const ALERT_LEVELS = {
+    normal:   { color: "#4CAF50", icon: "✓", message: "运行正常" },
+    info:     { color: "#2196F3", icon: "ℹ", message: "注意监控" },
+    warning:  { color: "#FF9800", icon: "⚠", message: "需要检查" },
+    critical: { color: "#F44336", icon: "⛔", message: "立即停机" }
+};
+```
+
+### 报警通知UI
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│  ⚠ [警告] 轮子打滑检测                                           │
+│  时间: 2026-04-21 10:30:25                                       │
+│  置信度: 92%                                                      │
+│  建议: 立即检查轮毂连接                                           │
+│                                                    [查看详情] [确认] │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### 控制权限切换
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                      控制模式切换                                  │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  当前模式: [自动驾驶] ◄──► [人工介入] ◄──► [维护模式]             │
+│                                                                  │
+│  自动驾驶: AI诊断系统自动控制，允许/禁止某些操作                   │
+│  人工介入: 人工接管控制，AI仅提供诊断建议                         │
+│  维护模式: 禁用所有自动功能，进入安全维护状态                     │
+│                                                                  │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+## 15.6 推荐的技术实现路径
+
+### Phase 1: 传感器数据扩展
+1. 添加转速传感器采集节点 → 发布 `/motor/rpm` 话题
+2. 添加振动传感器采集节点 → 发布 `/vibration/data` 话题
+3. 前端订阅并可视化这些新话题
+
+### Phase 2: 诊断结果集成
+1. 开发推理节点，订阅传感器数据话题
+2. 加载训练好的神经网络模型
+3. 发布诊断结果到 `/diagnosis/result`
+4. 前端订阅并展示诊断结果
+
+### Phase 3: 高级可视化
+1. 实时频谱分析图（FFT变换）
+2. 多传感器时序对比图
+3. 故障预测趋势图
+4. 历史数据回放功能
+
+### Phase 4: 人机交互增强
+1. 报警系统（声音/视觉）
+2. 控制权限管理与日志
+3. 诊断报告自动生成（PDF导出）
+4. 远程专家会诊功能
+
+## 15.7 新增ROS话题设计
+
+```python
+# 推理节点 → 前端
+/diagnosis/result     # 故障诊断结果 (std_msgs/String - JSON)
+/diagnosis/confidence # 置信度 (std_msgs/Float32)
+/diagnosis/alert      # 报警级别 (std_msgs/String)
+
+# 传感器扩展话题
+/motor/rpm            # 电机转速 (std_msgs/Float32MultiArray)
+/vibration/data       # 振动数据 (sensor_msgs/Imu 或自定义)
+
+# 前端 → 推理节点
+/diagnosis/enable     # 诊断使能 (std_msgs/Bool)
+/diagnosis/ack        # 报警确认 (std_msgs/String)
+```
+
+## 15.8 现有代码复用建议
+
+| 现有组件 | 可复用内容 | 复用方式 |
+|----------|-----------|----------|
+| `web_dashboard_server.py` | HTTP服务框架 | 新增 `/api/diagnosis/*` 端点 |
+| `cmd_vel_web_adapter.py` | 话题订阅/发布模式 | 参考添加新的话题回调 |
+| `index.html` | 整体布局框架 | 新增诊断结果面板组件 |
+| `current_reader.py` | 串口数据解析 | 移植到转速/振动传感器 |
+| `preprocess_data.py` | 数据预处理流程 | 统一传感器数据预处理 |
+
+---
+
+# 十六、数据预处理实现说明
+
+## 16.1 预处理流程概述
+
+数据预处理模块负责将原始采集的CSV数据转换为适合神经网络训练的格式：
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            数据预处理流水线                                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  原始CSV ──► 时间同步 ──► 缺失值 ──► 异常值 ──► 归一化 ──► 处理后CSV    │
+│             (插值)      (线性)    (3σ剔除)  (Min-Max)                    │
+│                                                                          │
+│  滑动窗口 ──► 训练/测试集 ──► 保存为.npy格式                            │
+│  (5秒窗口)                                                    │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+## 16.2 核心类设计
+
+### MultiChannelNormalizer - 多通道归一化器
+
+位于 [preprocess_data.py:38-159](turn_on_wheeltec_robot/scripts/preprocess_data.py#L38-L159)
+
+**功能**：对不同类型的传感器通道采用不同的归一化策略
+
+**通道分组**：
+
+```python
+CHANNEL_GROUPS = {
+    'position':    ['x', 'y', 'z'],           # 位置 - 对称归一化
+    'velocity':     ['vx', 'vy', 'vz'],        # 速度 - 对称归一化
+    'acceleration': ['ax', 'ay', 'az'],        # 加速度 - 对称归一化
+    'gyro':         ['gx', 'gy', 'gz'],        # 角速度 - 对称归一化
+    'voltage':      ['voltage'],                # 电压 - Min-Max [0,1]
+    'current':      ['current0', 'current1', 'current2']  # 电流 - 对称归一化
+}
+```
+
+**归一化方法**：
+
+| 通道类型 | 方法 | 输出范围 | 原因 |
+|----------|------|----------|------|
+| 电压 | Min-Max | [0, 1] | 单极性（始终为正） |
+| 位置/速度/加速度/角速度/电流 | 对称 | [-1, 1] | 有正负值，需保留方向信息 |
+
+### 16.3 归一化实现
+
+**fit()** - 计算归一化参数：
+
+```python
+def fit(self, df, method='symmetric'):
+    for col in self.feature_columns:
+        if col in df.columns:
+            data = df[col].values
+            max_abs = np.abs(data).max()
+
+            if method == 'mixed' and col in self.UNIPOLAR_CHANNELS:
+                # 电压：Min-Max [0,1]
+                self.normalizers[col] = {
+                    'type': 'minmax',
+                    'min': data.min(),
+                    'max': data.max()
+                }
+            else:
+                # 其他通道：对称 [-1,1]
+                self.normalizers[col] = {
+                    'type': 'symmetric',
+                    'max_abs': max_abs if max_abs > 1e-8 else 1.0
+                }
+```
+
+**transform()** - 应用归一化：
+
+```python
+def transform(self, df):
+    df_norm = df.copy()
+    for col in self.feature_columns:
+        params = self.normalizers[col]
+
+        if params['type'] == 'minmax':
+            # 电压：[0,1] 归一化
+            val_range = params['max'] - params['min']
+            df_norm[col] = (df[col] - params['min']) / val_range
+        else:
+            # 对称：除以 max_abs，限制在 [-1,1]
+            df_norm[col] = df[col] / params['max_abs']
+            df_norm[col] = np.clip(df_norm[col], -1.0, 1.0)
+
+    return df_norm
+```
+
+**inverse_transform()** - 反归一化（用于恢复原始尺度）：
+
+```python
+def inverse_transform(self, df_norm):
+    df = df_norm.copy()
+    for col in self.feature_columns:
+        params = self.normalizers[col]
+
+        if params['type'] == 'minmax':
+            df[col] = df_norm[col] * (params['max'] - params['min']) + params['min']
+        else:
+            df[col] = df_norm[col] * params['max_abs']
+
+    return df
+```
+
+## 16.4 DataPreprocessor - 数据预处理器
+
+位于 [preprocess_data.py:161-560](turn_on_wheeltec_robot/scripts/preprocess_data.py#L161-L560)
+
+### 16.4.1 数据加载
+
+**load_data()** 方法：
+
+```python
+def load_data(self, filename_pattern='*.csv'):
+    pattern = os.path.join(self.data_dir, filename_pattern)
+    files = glob.glob(pattern)
+
+    # 读取并合并所有CSV
+    dfs = []
+    for filepath in files:
+        df = pd.read_csv(filepath)
+        dfs.append(df)
+
+    self.raw_data = pd.concat(dfs, ignore_index=True)
+```
+
+**特征列定义**：
+
+```python
+FEATURE_COLUMNS = [
+    'x', 'y', 'z',           # 位置
+    'vx', 'vy', 'vz',       # 速度
+    'ax', 'ay', 'az',       # 加速度
+    'gx', 'gy', 'gz',       # 角速度
+    'voltage',               # 电压
+    'current0', 'current1', 'current2'  # 电流
+]
+
+TIMESTAMP_COLUMNS = ['timestamp', 'odom_time', 'imu_time', 'voltage_time', 'current_time']
+```
+
+### 16.4.2 时间戳同步
+
+**sync_timestamps()** 方法处理不同频率传感器数据的时间对齐：
+
+```python
+def sync_timestamps(self):
+    # 检查是否有独立时间戳字段
+    has_timestamp_cols = all(col in self.raw_data.columns for col in self.TIMESTAMP_COLUMNS)
+
+    if not has_timestamp_cols:
+        print("  警告: 未找到独立时间戳字段，跳过时间同步")
+        return
+
+    # 获取时间序列
+    current_times = self.raw_data['current_time'].astype(float).values
+    odom_times = self.raw_data['timestamp'].astype(float).values
+
+    # 计算平均间隔，判断是否需要插值
+    current_intervals = np.diff(current_times)
+    current_intervals = current_intervals[current_intervals > 0]
+    avg_interval = np.mean(current_intervals)
+
+    # 如果间隔差异不大，跳过插值
+    if avg_interval < 0.06:  # 60ms以下认为频率接近
+        print("  电流数据频率较高，跳过插值同步")
+        return
+
+    # 对电流通道进行线性插值
+    for col in ['current0', 'current1', 'current2']:
+        if col in self.raw_data.columns:
+            temp_df = self.raw_data[['timestamp', 'current_time', col]].copy()
+            temp_df = temp_df.dropna(subset=['current_time', col])
+
+            # 使用numpy插值
+            interpolated_vals = np.interp(
+                odom_times,           # 目标时间轴（odom的20Hz）
+                current_time_vals,     # 原始电流时间轴
+                current_val_vals      # 电流值
+            )
+
+            self.raw_data[col] = interpolated_vals
+```
+
+**同步原理图示**：
+
+```
+原始数据 (约5-6Hz):
+时间:    0    83   167  250  333  417  500 (ms)
+电流:    ●      ●      ●      ●      ●
+
+目标时间轴 (20Hz = 50ms间隔):
+时间:    0    50   100  150  200  250  300  350  400  450  500 (ms)
+
+插值后:
+电流:    ●──●──●──●──●──●──●──●──●──●──●
+```
+
+### 16.4.3 数据质量检查
+
+**check_data_quality()** 方法输出数据统计信息：
+
+```python
+def check_data_quality(self):
+    # 1. 缺失值统计
+    missing = self.raw_data.isnull().sum()
+
+    # 2. 时间戳连续性检查
+    timestamps = self.raw_data['timestamp'].astype(float).values
+    dt = np.diff(timestamps)
+    expected_dt = 0.05  # 20Hz期望50ms
+    dt_anomalies = np.sum(np.abs(dt - expected_dt) > 0.01)
+
+    # 3. 故障标签分布
+    label_counts = self.raw_data['fault_label'].value_counts().sort_index()
+
+    # 4. 数据范围统计
+    for col in self.FEATURE_COLUMNS[:6]:
+        min_val = self.raw_data[col].min()
+        max_val = self.raw_data[col].max()
+```
+
+**检查输出示例**：
+
+```
+==================================================
+数据质量检查
+==================================================
+
+缺失值统计:
+✓ 无缺失值
+
+时间戳连续性检查:
+  期望间隔: 50.0 ms
+  实际间隔: 49.95 ± 0.23 ms
+  异常点数: 3 (0.01%)
+
+故障标签分布:
+  0 (normal): 12000 行
+  1 (drive_fault): 3000 行
+
+数据范围统计:
+  x: [-2.5000, 3.2000]
+  y: [-1.8000, 1.9000]
+  vx: [-0.8500, 0.9200]
+==================================================
+```
+
+### 16.4.4 缺失值处理
+
+**handle_missing_values()** 使用线性插值填充：
+
+```python
+def handle_missing_values(self):
+    for col in self.FEATURE_COLUMNS:
+        if col in self.processed_data.columns:
+            if self.processed_data[col].isnull().sum() > 0:
+                self.processed_data[col] = self.processed_data[col].interpolate(
+                    method='linear',
+                    limit_direction='both'
+                )
+
+    # 删除仍有缺失的行
+    remaining_missing = sum(
+        self.processed_data[col].isnull().sum()
+        for col in self.FEATURE_COLUMNS
+        if col in self.processed_data.columns
+    )
+
+    if remaining_missing > 0:
+        self.processed_data = self.processed_data.dropna(subset=self.FEATURE_COLUMNS)
+```
+
+**线性插值示意**：
+
+```
+原始数据:  1.2   NaN   NaN   2.1   2.8   NaN   4.1
+              ↘  ↘  ↘
+插值后:    1.2  1.5  1.8  2.1  2.8  3.45  4.1
+                    ↑   ↑
+              线性填补缺失值
+```
+
+### 16.4.5 异常值剔除
+
+**remove_outliers()** 使用3σ原则：
+
+```python
+def remove_outliers(self, sigma_threshold=3):
+    mask = pd.Series([True] * len(self.processed_data))
+
+    for col in self.FEATURE_COLUMNS:
+        mean = self.processed_data[col].mean()
+        std = self.processed_data[col].std()
+
+        if std < 1e-8:
+            continue
+
+        # 计算异常值掩码
+        col_mask = (
+            (self.processed_data[col] >= mean - sigma_threshold * std) &
+            (self.processed_data[col] <= mean + sigma_threshold * std)
+        )
+
+        outliers_count = (~col_mask).sum()
+        mask &= col_mask
+
+    self.processed_data = self.processed_data[mask].reset_index(drop=True)
+```
+
+**3σ原则示意**：
+
+```
+概率密度
+    │                                                    ▲
+    │                                               ╱╲   │ ← 异常区域
+    │                                          ╱╲  ╱  ╲
+    │                                     ╱╲  ╱  ╲╱    ╲
+    │                                ╱╲  ╱  ╲╱        ╲
+    │                           ╱╲  ╱  ╲╱              ╲
+    │                      ╱╲  ╱  ╲╱                   ╲
+    │──────────────────╱╲╱  ╲╱                        ╲────
+    │         ▲      ╱    ╲╱
+    │    ─3σ  │  ╱╲  │
+    │         ▼╱    ╲ │
+    │───────────────┴──────────────────────────────────────►
+                   0         均值        +3σ
+
+    保留区域: [μ-3σ, μ+3σ]
+    剔除区域: outside [μ-3σ, μ+3σ]
+```
+
+### 16.4.6 完整预处理流程
+
+**process_pipeline()** 串联所有步骤：
+
+```python
+def process_pipeline(self, remove_outliers_flag=True, sync_flag=True, skip_first=0):
+    # Step 1: 质量检查
+    self.check_data_quality()
+
+    # Step 2: 初始化
+    self.processed_data = self.raw_data.copy()
+
+    # Step 2.5: 跳过前N秒数据（丢弃启动阶段的0值）
+    if skip_first > 0:
+        rows_to_skip = int(skip_first * 20)  # 20Hz采样率
+        self.processed_data = self.processed_data.iloc[skip_first:].reset_index(drop=True)
+
+    # Step 3: 时间戳同步
+    if sync_flag:
+        self.sync_timestamps()
+
+    # Step 4: 缺失值处理
+    self.handle_missing_values()
+
+    # Step 5: 异常值剔除
+    if remove_outliers_flag:
+        self.remove_outliers(sigma_threshold=3)
+
+    # Step 6: 归一化
+    self.normalize(method='symmetric')
+
+    return self.processed_data
+```
+
+### 16.4.7 数据保存
+
+**save_processed_data()** 保存处理结果：
+
+```python
+def save_processed_data(self, output_path=None):
+    # 1. 处理后数据 CSV
+    csv_path = output_path + '.csv'
+    self.processed_data.to_csv(csv_path, index=False)
+
+    # 2. 归一化参数 (用于测试集反归一化)
+    norm_params = {
+        'normalizers': self.multi_normalizer.get_params(),
+        'feature_columns': self.FEATURE_COLUMNS,
+        'label_names': self.LABEL_NAMES,
+        'method': self.multi_normalizer.method
+    }
+    with open(norm_params_path, 'wb') as f:
+        pickle.dump(norm_params, f)
+
+    # 3. 统计信息
+    stats = {
+        'total_rows': len(self.processed_data),
+        'feature_columns': self.FEATURE_COLUMNS,
+        'n_features': len(self.FEATURE_COLUMNS),
+        'label_distribution': self.processed_data['fault_label'].value_counts().to_dict()
+    }
+    with open(stats_path, 'wb') as f:
+        pickle.dump(stats, f)
+```
+
+## 16.5 滑动窗口分割
+
+参考 [create_sliding_windows.py](turn_on_wheeltec_robot/scripts/create_sliding_windows.py)：
+
+```python
+# 窗口参数
+WINDOW_SIZE = 100  # 5秒 @ 20Hz
+STEP_SIZE = 50     # 2.5秒 (50%重叠)
+OVERLAP = 0.5      # 50%重叠率
+```
+
+**滑动窗口示意**：
+
+```
+时间轴:  0    1    2    3    4    5    6    7    8    9   10 (秒)
+         │←───────────→│
+                    │←───────────→│
+                              │←───────────→│
+```
+
+**重叠率计算**：
+
+```
+重叠率 = (WINDOW_SIZE - STEP_SIZE) / WINDOW_SIZE = (100 - 50) / 100 = 50%
+```
+
+## 16.6 使用示例
+
+### 命令行使用
+
+```bash
+# 基本用法 - 处理目录下所有CSV
+python preprocess_data.py --data_dir /path/to/log --pattern '*.csv'
+
+# 跳过时间同步（兼容旧数据格式）
+python preprocess_data.py --data_dir /path/to/log --pattern '*.csv' --no_sync
+
+# 跳过前5秒数据（丢弃启动阶段0值）
+python preprocess_data.py --data_dir /path/to/log --pattern '*.csv' --skip_first 5
+
+# 跳过异常值剔除
+python preprocess_data.py --data_dir /path/to/log --pattern '*.csv' --no_outlier_removal
+
+# 使用混合归一化方法
+python preprocess_data.py --data_dir /path/to/log --pattern '*.csv' --normalize mixed
+```
+
+### Python代码调用
+
+```python
+from preprocess_data import DataPreprocessor
+
+# 创建预处理器
+preprocessor = DataPreprocessor(data_dir='/path/to/log')
+
+# 加载数据
+preprocessor.load_data('*.csv')
+
+# 执行预处理
+preprocessor.process_pipeline(
+    remove_outliers_flag=True,
+    sync_flag=True,
+    skip_first=5
+)
+
+# 保存结果
+preprocessor.save_processed_data('/path/to/output/processed_data')
+```
+
+## 16.7 预处理参数总结
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| 采样率 | 20Hz | 由底盘控制器决定 |
+| 窗口大小 | 100点 = 5秒 | 20Hz × 5s = 100 |
+| 步长 | 50点 = 2.5秒 | 50%重叠 |
+| 重叠率 | 50% | (100-50)/100 |
+| 异常值阈值 | 3σ | 保留99.7%数据 |
+| 归一化方法 | 对称[-1,1] | 推荐，保留正负信息 |
+| 归一化方法(电压) | [0,1] | 单极性 |
+
+---
+
+## 总结
+
+当前Web前端已实现基础的遥控功能和数据监控，毕设的核心拓展方向在于：
+
+1. **传感器层面**：扩展转速、振动等新传感器数据类型
+2. **算法层面**：集成故障诊断深度学习模型的推理结果
+3. **UI层面**：新增诊断结果可视化、报警管理、数据融合仪表盘
+
+建议采用**增量开发**策略：
+- 先完成传感器扩展（数据来源）
+- 再集成推理结果（算法落地）
+- 最后完善可视化（用户体验）
+
+
+

@@ -1,0 +1,1176 @@
+# 中期总结报告
+
+## 目录
+
+1. [项目概述](#一项目概述)
+2. [已完成工作详解](#二已完成工作详解)
+3. [数据集详细分析](#三数据集详细分析)
+4. [存在问题与风险分析](#四存在问题与风险分析)
+5. [技术方案详细设计](#五技术方案详细设计)
+6. [下一步工作计划](#六下一步工作计划)
+7. [毕设任务完成度评估](#七毕设任务完成度评估)
+8. [附录](#八附录)
+
+---
+
+## 一、项目概述
+
+### 1.1 课题背景与意义
+
+**课题名称**：基于多传感器融合的机器人故障诊断研究
+
+**研究对象**：R550PLUS 三全向轮机器人
+
+**选题依据**：
+
+1. **应用背景**：三全向轮机器人广泛应用于仓储物流、服务机器人、医院配送等领域，具有灵活的全向移动能力
+
+2. **实际需求**：机器人运行过程中可能发生多种故障，如：
+   - 电机驱动异常（单轮堵转）
+   - 轮子打滑（轮毂脱落或损坏）
+   - 电机轴偏心（偏心负载运行）
+
+3. **研究意义**：
+   - 传统故障诊断依赖人工检查，效率低下
+   - 深度学习在时序数据分析领域取得显著成果
+   - 实时故障诊断可提高机器人运行安全性和可靠性
+
+### 1.2 毕设任务分解
+
+| 任务编号 | 任务名称 | 具体要求 | 权重 |
+|----------|----------|----------|------|
+| 任务一 | 故障诊断硬件平台设计 | 完成故障情况下的电压、电流、转速、振动及加速度等多源传感器数据的采集与传输 | 30% |
+| 任务二 | 深度神经网络模型设计 | 设计基于多传感器融合的机器人智能故障诊断深度神经网络模型，在自采数据集上完成神经网络的训练和测试 | 40% |
+| 任务三 | 前端界面设计 | 设计前端界面，完成机器运行数据、诊断结果的可视化，实现人机交互UI界面设计 | 30% |
+
+### 1.3 预期故障类型及特征
+
+根据机器人实际运行中可能出现的故障，设计以下5类故障标签：
+
+| 标签 | 故障名称 | 故障描述 | 典型信号特征 | 采集方法 |
+|------|----------|----------|--------------|----------|
+| 0 | normal | 正常状态 | 各项参数稳定在正常范围 | 正常运行 |
+| 1 | drive_fault | 驱动异常 | 单轮堵转时对应通道电流突变增大 | 手动阻挡单轮 |
+| 2 | wheel_slip | 轮子打滑 | 轮毂脱落时速度波动增大、加速度异常 | 轮毂松脱/损坏 |
+| 3 | shaft_eccentric | 电机轴偏心 | 周期性振动、角速度周期性波动 | 偏心负载运行 |
+
+---
+
+## 二、已完成工作详解
+
+### 2.1 数据采集系统
+
+#### 2.1.1 硬件系统架构
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              硬件系统架构                                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌─────────────────────┐         ┌─────────────────────┐                   │
+│  │    底盘控制器        │         │    电流检测板        │                   │
+│  │    (STM32)         │         │    (独立MCU)        │                   │
+│  │                     │         │                     │                   │
+│  │  ┌───────────────┐  │         │  ┌───────────────┐  │                   │
+│  │  │ 里程计计算    │  │         │  │ 三通道电流采样  │  │                   │
+│  │  │ IMU数据采集  │  │         │  │ 协议封装       │  │                   │
+│  │  │ 电机控制      │  │         │  │ 串口通信       │  │                   │
+│  │  └───────────────┘  │         │  └───────────────┘  │                   │
+│  └──────────┬──────────┘         └──────────┬──────────┘                   │
+│             │ USB CDC                          │ USB转串口                    │
+│             ▼                                   ▼                              │
+│  ┌─────────────────────────────────────────────────────────────┐           │
+│  │                      ROS 系统                               │           │
+│  │                                                             │           │
+│  │   /odom (20Hz)  ←──────────┬──────────→ /cmd_vel (40Hz) │           │
+│  │   /imu (20Hz)              │                               │           │
+│  │   /PowerVoltage (20Hz)      │                               │           │
+│  │   /current_data (~5-6Hz) ───┘                               │           │
+│  │                                                             │           │
+│  └─────────────────────────────────────────────────────────────┘           │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### 2.1.2 串口通信参数
+
+| 设备 | 路径 | 波特率 | 数据位 | 停止位 | 校验 | 说明 |
+|------|------|--------|--------|--------|------|------|
+| 底盘控制器 | `/dev/ttyCH343USB0` | 115200 | 8 | 1 | 无 | USB转串口 |
+| 电流检测板 | `/dev/ttyUSB0` | 115200 | 8 | 1 | 无 | USB转串口 |
+
+#### 2.1.3 电流数据协议格式
+
+电流检测板采用文本协议，格式如下：
+
+```
+$CURRENT,<ch0>,<ch1>,<ch2>*<checksum>\r\n
+```
+
+**示例帧**：
+```
+$CURRENT,-0.0391,-0.0287,-0.1038*7E\r\n
+```
+
+**协议解析**：
+
+| 字段 | 长度 | 说明 |
+|------|------|------|
+| `$CURRENT,` | 5字节 | 固定帧头 |
+| `<ch0>` | 可变 | 通道0电流值，ASCII文本，单位A |
+| `,` | 1字节 | 分隔符 |
+| `<ch1>` | 可变 | 通道1电流值 |
+| `,` | 1字节 | 分隔符 |
+| `<ch2>` | 可变 | 通道2电流值 |
+| `*` | 1字节 | 校验和分隔符 |
+| `<checksum>` | 2字节 | 8位XOR校验和，16进制 |
+| `\r\n` | 2字节 | 帧尾 |
+
+**校验和计算算法**：
+
+```python
+def calculate_checksum(data: str) -> int:
+    """
+    计算XOR校验和
+    从'$'到'*'之前的所有字符进行XOR运算
+    """
+    checksum = 0
+    for char in data:
+        if char == '*':
+            break
+        checksum ^= ord(char)
+    return checksum
+```
+
+**示例计算**：
+```
+数据: $CURRENT,-0.0391,-0.0287,-0.1038
+计算: '$' XOR 'C' XOR ... XOR '8' = 0x7E
+```
+
+#### 2.1.4 ROS话题详情
+
+| 话题名称 | 消息类型 | 频率 | 发布者 | 数据内容 | 数据范围 |
+|----------|----------|------|--------|----------|----------|
+| `/odom` | nav_msgs/Odometry | 20Hz | wheeltec_robot.cpp | 位置(x,y,z)、速度(vx,vy,vz)、四元数方向 | 位置±3m, 速度±1m/s |
+| `/imu` | sensor_msgs/Imu | 20Hz | wheeltec_robot.cpp | 线加速度(ax,ay,az)、角速度(gx,gy,gz) | 加速度±16g, 角速度±2000°/s |
+| `/PowerVoltage` | std_msgs/Float32 | 20Hz | wheeltec_robot.cpp | 电池电压 | 18-26V |
+| `/current_data` | std_msgs/Float32MultiArray | ~5-6Hz | current_reader.py | 三通道电流[current0,current1,current2] | ±5A |
+| `/cmd_vel` | geometry_msgs/Twist | 40Hz | cmd_vel_web_adapter.py | 期望速度指令 | 线性±1.5m/s, 角速度±3.75rad/s |
+
+#### 2.1.5 数据采集核心实现
+
+[data_collector.py](turn_on_wheeltec_robot/scripts/data_collector.py) 采用**触发式采集**机制：
+
+```python
+class DataCollector:
+    def __init__(self, fault_label=0):
+        # 故障标签
+        self.fault_label = fault_label
+
+        # 存储最新收到的话题数据
+        self.latest_data = {
+            'odom': None, 'imu': None,
+            'voltage': None, 'current': None,
+            'odom_time': None, 'imu_time': None,
+            'voltage_time': None, 'current_time': None,
+        }
+
+    def setup_subscribers(self):
+        """设置独立订阅器"""
+        # /odom 是主触发源，每次收到就记录一行
+        rospy.Subscriber('/odom', Odometry, self.odom_callback)
+        rospy.Subscriber('/imu', Imu, self.imu_callback)
+        rospy.Subscriber('/PowerVoltage', Float32, self.voltage_callback)
+        rospy.Subscriber('/current_data', Float32MultiArray, self.current_callback)
+
+    def odom_callback(self, msg):
+        """里程计回调 - 触发数据记录"""
+        self.latest_data['odom'] = msg
+        self.latest_data['odom_time'] = msg.header.stamp.to_sec()
+        self.record_data()  # 每次收到odom触发一次记录
+
+    def record_data(self):
+        """记录一行数据到CSV"""
+        # 使用最新缓存值填充所有通道
+        # 记录各话题的独立时间戳供后续同步
+```
+
+**设计优势**：
+- odom以20Hz稳定输出，作为系统时钟基准
+- 保证数据记录的时间均匀性
+- 其他话题使用"最新值"策略，避免数据丢失
+- 记录独立时间戳，保留后续同步灵活性
+
+#### 2.1.6 CSV输出格式
+
+```csv
+timestamp,frame,odom_time,imu_time,voltage_time,current_time,
+x,y,z,vx,vy,vz,ax,ay,az,gx,gy,gz,
+voltage,current0,current1,current2,fault_label
+```
+
+| 字段组 | 字段名 | 单位 | 数据来源 |
+|--------|--------|------|----------|
+| 时间戳 | timestamp | s | 主时间戳(odom基准) |
+| | odom_time | s | odom.header.stamp |
+| | imu_time | s | imu.header.stamp |
+| | voltage_time | s | rospy.Time.now() |
+| | current_time | s | rospy.Time.now() |
+| 位置 | x, y, z | m | odom.pose.pose.position |
+| 速度 | vx, vy, vz | m/s | odom.twist.twist.linear |
+| 加速度 | ax, ay, az | m/s² | imu.linear_acceleration |
+| 角速度 | gx, gy, gz | rad/s | imu.angular_velocity |
+| 电压 | voltage | V | PowerVoltage.data |
+| 电流 | current0,1,2 | A | current_data.data[0,1,2] |
+| 标签 | fault_label | - | launch参数 |
+
+### 2.2 数据处理流水线
+
+#### 2.2.1 完整流水线架构
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           数据处理流水线                                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐           │
+│  │ 原始CSV   │───►│ 时间同步  │───►│ 缺失值   │───►│ 异常值   │           │
+│  │ 加载      │    │ (插值)    │    │ 处理     │    │ 剔除    │           │
+│  └──────────┘    └──────────┘    └──────────┘    └──────────┘           │
+│                                                             │              │
+│                                                             ▼              │
+│  ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐           │
+│  │ 保存结果  │◄───│ 滑动窗口 │◄───│ 归一化   │◄───│ 处理后CSV│           │
+│  │          │    │ 分割      │    │          │    │          │           │
+│  └──────────┘    └──────────┘    └──────────┘    └──────────┘           │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### 2.2.2 时间同步机制详解
+
+由于 `/current_data` 频率(~5-6Hz)远低于其他话题(20Hz)，需要进行时间同步：
+
+**原始数据时间轴**：
+```
+/odom:      ✓    ✓    ✓    ✓    ✓    ✓    ✓    ✓    ✓    ✓    (20Hz, 50ms间隔)
+/current:      ●        ●        ●        ●        ●        (5Hz, 200ms间隔)
+```
+
+**问题**：在odom的20Hz时间轴上，电流数据可能每2-4个odom周期才更新一次，直接使用最新值会导致大量重复值。
+
+**解决方案**：使用线性插值将低频数据对齐到高频时间轴
+
+**插值同步后**：
+```
+/odom:      ✓    ✓    ✓    ✓    ✓    ✓    ✓    ✓    ✓    ✓    (20Hz)
+/current:    ●──●──●──●──●──●──●──●──●──●──●──●──●──●  (插值到20Hz)
+```
+
+**实现代码**：
+
+```python
+def sync_timestamps(self):
+    """对电流通道进行线性插值"""
+    current_times = self.raw_data['current_time'].astype(float).values
+    odom_times = self.raw_data['timestamp'].astype(float).values
+
+    for col in ['current0', 'current1', 'current2']:
+        # 创建临时DataFrame用于插值
+        temp_df = self.raw_data[['timestamp', 'current_time', col]].copy()
+        temp_df = temp_df.dropna(subset=['current_time', col])
+        temp_df = temp_df.sort_values('current_time')
+
+        # numpy插值
+        interpolated_vals = np.interp(
+            odom_times,           # 目标时间轴 (20Hz)
+            temp_df['current_time'].values,  # 原始电流时间轴
+            temp_df[col].values    # 电流值
+        )
+
+        self.raw_data[col] = interpolated_vals
+```
+
+#### 2.2.3 缺失值处理
+
+采用**线性插值**填充缺失值：
+
+```python
+def handle_missing_values(self):
+    """处理缺失值：线性插值"""
+    for col in self.FEATURE_COLUMNS:
+        if col in self.processed_data.columns:
+            if self.processed_data[col].isnull().sum() > 0:
+                self.processed_data[col] = self.processed_data[col].interpolate(
+                    method='linear',
+                    limit_direction='both'
+                )
+```
+
+**插值效果示意**：
+```
+原始序列:  [1.2, NaN, NaN, 2.1, 2.8, NaN, 4.1]
+插值后:    [1.2, 1.5, 1.8, 2.1, 2.8, 3.45, 4.1]
+           │  ↑     ↑   │     ↑
+           └───┴─────┴───┘     └── 线性填补
+```
+
+#### 2.2.4 异常值剔除（3σ原则）
+
+基于统计学原理，数据在[μ-3σ, μ+3σ]区间内概率为99.7%：
+
+```python
+def remove_outliers(self, sigma_threshold=3):
+    """剔除异常值（3σ原则）"""
+    mask = pd.Series([True] * len(self.processed_data))
+
+    for col in self.FEATURE_COLUMNS:
+        mean = self.processed_data[col].mean()
+        std = self.processed_data[col].std()
+
+        if std < 1e-8:
+            continue
+
+        # 计算异常值掩码
+        col_mask = (
+            (self.processed_data[col] >= mean - sigma_threshold * std) &
+            (self.processed_data[col] <= mean + sigma_threshold * std)
+        )
+
+        mask &= col_mask
+
+    self.processed_data = self.processed_data[mask].reset_index(drop=True)
+```
+
+**3σ原则示意图**：
+
+```
+概率密度
+    │                                         ▲
+    │                                    ╱╲   │ ← 异常区域 (>3σ)
+    │                               ╱╲  ╱  ╲  │
+    │                          ╱╲  ╱  ╲╱    ╲ │
+    │                     ╱╲  ╱  ╲╱        ╲ │
+    │                ╱╲  ╱  ╲╱              ╲│
+    │           ╱╲  ╱  ╲╱                   ╲────
+    │      ─3σ   ╱  ╲│
+    │───────────────┴──────────────────────────────────────►
+    │              μ(均值)           +3σ
+    │
+    │←──────────── 保留区域 [μ-3σ, μ+3σ] ──────────→
+```
+
+#### 2.2.5 归一化策略
+
+| 通道类型 | 方法 | 输出范围 | 原因 |
+|----------|------|----------|------|
+| 电压 | Min-Max | [0, 1] | 单极性数据，始终为正 |
+| 位置/速度/加速度/角速度/电流 | 对称归一化 | [-1, 1] | 有正负值，需保留方向信息 |
+
+**对称归一化公式**：
+
+```python
+class MultiChannelNormalizer:
+    def fit(self, df, method='symmetric'):
+        """计算归一化参数"""
+        for col in self.feature_columns:
+            if col in df.columns:
+                data = df[col].values
+                max_abs = np.abs(data).max()
+
+                if method == 'mixed' and col in self.UNIPOLAR_CHANNELS:
+                    # 电压：Min-Max [0,1]
+                    self.normalizers[col] = {
+                        'type': 'minmax',
+                        'min': data.min(),
+                        'max': data.max()
+                    }
+                else:
+                    # 其他通道：对称 [-1,1]
+                    self.normalizers[col] = {
+                        'type': 'symmetric',
+                        'max_abs': max_abs if max_abs > 1e-8 else 1.0
+                    }
+
+    def transform(self, df):
+        """应用归一化"""
+        df_norm = df.copy()
+        for col in self.feature_columns:
+            if params['type'] == 'minmax':
+                df_norm[col] = (df[col] - params['min']) / (params['max'] - params['min'])
+            else:
+                df_norm[col] = df[col] / params['max_abs']
+                df_norm[col] = np.clip(df_norm[col], -1.0, 1.0)
+        return df_norm
+```
+
+#### 2.2.6 滑动窗口分割
+
+```
+时间轴:  0    1    2    3    4    5    6    7    8    9   10 (秒)
+         │←─────────────────→│
+                    │←─────────────────→│
+                               │←─────────────────→│
+
+窗口参数:
+- 窗口大小: 100点 = 5秒 @ 20Hz
+- 步长: 50点 = 2.5秒
+- 重叠率: (100-50)/100 = 50%
+```
+
+**实现代码**：
+
+```python
+class SlidingWindowCreator:
+    WINDOW_SIZE = 100  # 100点 = 5秒 @ 20Hz
+    STEP_SIZE = 50     # 步长50点 = 2.5秒
+
+    def create_windows(self):
+        """创建滑动窗口"""
+        windows_X = []
+        windows_y = []
+
+        start_idx = 0
+        while start_idx + self.WINDOW_SIZE <= len(self.data):
+            end_idx = start_idx + self.WINDOW_SIZE
+
+            # 提取窗口数据
+            window_data = self.data[self.FEATURE_COLUMNS].iloc[start_idx:end_idx].values
+            windows_X.append(window_data)
+
+            # 标签取窗口最后一个点的标签(众数)
+            window_label = int(self.data['fault_label'].iloc[start_idx:end_idx].mode()[0])
+            windows_y.append(window_label)
+
+            start_idx += self.STEP_SIZE
+
+        return np.array(windows_X), np.array(windows_y)
+```
+
+#### 2.2.7 训练测试集划分
+
+采用**时序划分**而非随机划分，保证数据时间连续性：
+
+```python
+def temporal_split(self, test_ratio=0.2):
+    """时序划分训练集和测试集"""
+    n_windows = len(self.windows_X)
+    split_idx = int(n_windows * (1 - test_ratio))
+
+    # 训练集：前80%
+    self.X_train = self.windows_X[:split_idx]
+    self.y_train = self.windows_y[:split_idx]
+
+    # 测试集：后20%
+    self.X_test = self.windows_X[split_idx:]
+    self.y_test = self.windows_y[split_idx:]
+```
+
+**时序划分优势**：
+- 避免数据泄露（测试集不包含训练时序前的数据）
+- 更符合实际应用场景
+- 保证训练和测试数据的独立性
+
+### 2.3 Web遥控系统
+
+#### 2.3.1 系统架构
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          Web遥控系统架构                                     │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │                        浏览器 (Web Dashboard)                        │   │
+│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐               │   │
+│  │  │  虚拟摇杆   │  │   键盘      │  │  Xbox手柄   │               │   │
+│  │  │  (Touch)   │  │  (WASD)    │  │  (Gamepad) │               │   │
+│  │  └─────────────┘  └─────────────┘  └─────────────┘               │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                      │                                      │
+│                           WebSocket (Rosbridge)                             │
+│                                      ▼                                      │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │                       cmd_vel_web_adapter.py                          │   │
+│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────────┐   │   │
+│  │  │ 速度限制  │  │ 响应曲线  │  │ 死区滤波  │  │  PID巡航控制     │   │   │
+│  │  │ max_limits│  │ shape_   │  │ deadband │  │  PIDController   │   │   │
+│  │  └──────────┘  └──────────┘  └──────────┘  └──────────────────┘   │   │
+│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐                          │   │
+│  │  │ 指令超时  │  │ 心跳超时  │  │  急停    │                          │   │
+│  │  │ 0.5s    │  │ 1.0s    │  │ estop   │                          │   │
+│  │  └──────────┘  └──────────┘  └──────────┘                          │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                      │                                      │
+│                                      ▼                                      │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │                     /cmd_vel → 底盘控制器 → 电机                     │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### 2.3.2 响应曲线处理
+
+采用非线性响应曲线改善操控手感：
+
+```python
+def shape_axis(self, value, limit, deadband, min_ratio):
+    """
+    非线性响应曲线
+    - 死区滤波：小于死区阈值视为零
+    - 最小输出比：低输入时也有基本响应
+    - 指数曲线：通过response_exponent调整曲线形状
+    """
+    magnitude = abs(value)
+    if magnitude <= deadband:
+        return 0.0
+
+    # 归一化到[0,1]
+    normalized = (magnitude - deadband) / (1 - deadband)
+
+    # 应用指数曲线
+    shaped = min_ratio + (1 - min_ratio) * pow(normalized, self.response_exponent)
+
+    return shaped * limit if value >= 0 else -shaped * limit
+```
+
+**响应曲线对比**（deadband=0.07, min_ratio=0.2, exponent=0.7）：
+
+```
+输出
+ 1.0 ┤                    ╱─── 非线性响应(0.7)
+     │               ╱────
+ 0.2 ┤─────────────────────────────── 线性响应(1.0)
+     │    ╱
+ 0.0 ┼──┴────────────────────────────── 输入
+     0  deadband                    1.0
+```
+
+#### 2.3.3 PID巡航控制
+
+三通道独立PID控制器实现定速巡航：
+
+```python
+class PIDController:
+    def __init__(self, kp=0.8, ki=0.1, kd=0.3, output_limit=1.0):
+        self.kp = kp
+        self.ki = ki
+        self.kd = kd
+        self.output_limit = output_limit
+        self.integral = 0.0
+        self.prev_error = 0.0
+
+    def compute(self, target, current, dt=None):
+        """计算PID输出"""
+        error = target - current
+
+        # 积分项（带限幅防止积分饱和）
+        self.integral += error * (dt or 0.1)
+        self.integral = max(-0.5, min(0.5, self.integral))
+
+        # 微分项
+        if dt is not None and dt > 0:
+            derivative = (error - self.prev_error) / dt
+        else:
+            derivative = 0.0
+
+        # PID输出
+        output = self.kp * error + self.ki * self.integral + self.kd * derivative
+        output = max(-self.output_limit, min(self.output_limit, output))
+
+        self.prev_error = error
+        return output
+```
+
+**PID控制框图**：
+
+```
+         ┌──────────────────────────────────────┐
+         │                                      │
+Target ──► ──►  Σ  ──► PID ──► cmd ──► 机器人     │
+    │           │         Controller            │     │
+    │           │                             ▼     │
+    │      ┌────────┐                   /odom     │
+    └──────┤Error=  │◄─────────────────────────────┘
+           │Target- │
+           │Actual  │
+           └────────┘
+```
+
+#### 2.3.4 安全机制详解
+
+| 机制 | 触发条件 | 行为 | 恢复方式 |
+|------|----------|------|----------|
+| 指令超时 | 0.5s无新指令 | 自动停车 | 发送新指令 |
+| 心跳超时 | 1.0s无心跳 | 自动停车 | 发送新指令 |
+| 急停 | 收到estop命令 | 锁定停车 | 手动解除estop |
+| 速度限制 | 任何指令 | 限制在最大值内 | - |
+
+```python
+def resolve_status_and_command(self):
+    now = rospy.Time.now()
+
+    if self.estop_latched:
+        return "estop", self.zero_twist()
+
+    if self.cruise_active:
+        return "cruise", None
+
+    if not self.have_cmd:
+        return "idle", self.zero_twist()
+
+    # 指令超时检查
+    if (now - self.last_cmd_time).to_sec() > self.cmd_timeout:
+        return "cmd_timeout", self.zero_twist()
+
+    # 心跳超时检查
+    if (now - self.last_heartbeat_time).to_sec() > self.heartbeat_timeout:
+        return "heartbeat_timeout", self.zero_twist()
+
+    return "active", self.last_cmd
+```
+
+---
+
+## 三、数据集详细分析
+
+### 3.1 数据集统计
+
+| 故障类型 | 标签 | 原始行数 | 窗口数 | 训练集 | 测试集 | 占比 |
+|----------|------|----------|--------|--------|--------|------|
+| normal | 0 | ~12,000 | 110 | 88 | 22 | 58.2% |
+| drive_fault | 1 | ~3,500 | 43 | 34 | 9 | 22.8% |
+| wheel_slip | 2 | ~1,500 | 19 | 15 | 4 | 10.1% |
+| shaft_eccentric | 3 | ~1,300 | 17 | 13 | 4 | 9.0% |
+| **总计** | - | **~18,300** | **189** | **150** | **39** | 100% |
+
+### 3.2 数据质量指标
+
+| 指标 | 数值 | 说明 |
+|------|------|------|
+| 缺失值 | 无 | 线性插值已填充 |
+| 无穷值 | 无 | 数据验证通过 |
+| 数值范围 | [-1, 1] | 归一化后符合预期 |
+| 时间间隔 | 49.95±0.23ms | 接近20Hz理想值(50ms) |
+| 异常点比例 | 0.01% | 时间戳连续性良好 |
+
+### 3.3 数据集问题分析
+
+#### 3.3.1 类别不平衡影响
+
+```
+类别分布可视化:
+
+normal (110样本) ████████████████████████████████████████ 58.2%
+drive_fault (43)  ██████████████████ 22.8%
+wheel_slip (19)    █████████ 10.1%
+shaft_eccentric(17) ████████ 9.0%
+```
+
+**不平衡影响**：
+- 模型可能严重偏向预测多数类(normal)
+- 少数类召回率可能极低
+- 需要采用加权损失、SMOTE等平衡策略
+
+#### 3.3.2 样本量评估
+
+| 评估维度 | 当前状态 | 深度学习要求 | 差距 |
+|----------|----------|--------------|------|
+| 最少类样本 | 17个窗口 | 100+个窗口 | -83% |
+| 最多类样本 | 110个窗口 | 100+个窗口 | 已达标 |
+| 总样本量 | 189个窗口 | 500+个窗口 | -62% |
+
+#### 3.3.3 数据多样性不足
+
+| 多样性维度 | 当前状态 | 理想状态 |
+|------------|----------|----------|
+| 采集日期 | 4月19-20日 | 多日采集 |
+| 负载条件 | 固定 | 不同负载 |
+| 环境 | 室内实验 | 不同环境 |
+
+---
+
+## 四、存在问题与风险分析
+
+### 4.1 问题清单
+
+#### 4.1.1 数据层面（高优先级）
+
+| 序号 | 问题 | 严重程度 | 影响 |
+|------|------|----------|------|
+| P2 | 类别严重不平衡(58% vs 9-23%) | 🔴高 | 模型偏向多数类，少数类召回率低 |
+| P3 | 样本总量不足(189 vs 建议500+) | 🔴高 | 模型泛化能力差 |
+| P4 | 数据来源单一(仅2天) | 🟡中 | 缺乏多样性，可能过拟合 |
+| P5 | 缺少转速传感器 | 🟡中 | 毕设要求未完全满足 |
+| P6 | 缺少振动传感器 | 🟡中 | 毕设要求未完全满足 |
+
+#### 4.1.2 算法层面（高优先级）
+
+| 序号 | 问题 | 严重程度 | 影响 |
+|------|------|----------|------|
+| P7 | 故障诊断模型未设计 | 🔴高 | 毕设核心任务未开始 |
+| P8 | 推理节点未开发 | 🔴高 | 无法实现实时诊断 |
+| P9 | 模型训练流程未建立 | 🔴高 | 无法验证模型效果 |
+
+#### 4.1.3 系统层面（中优先级）
+
+| 序号 | 问题 | 严重程度 | 影响 |
+|------|------|----------|------|
+| P10 | 诊断结果展示UI缺失 | 🟡中 | 毕设任务不完整 |
+| P11 | 报警系统缺失 | 🟡中 | 用户无法及时获知故障 |
+| P12 | 控制权限管理缺失 | 🟡中 | 缺乏安全机制 |
+
+### 4.2 风险评估矩阵
+
+| 风险 | 概率 | 影响 | 优先级 |
+|------|------|------|--------|
+| 样本量不足导致模型效果差 | 高 | 高 | P3 |
+| 时间不足导致任务无法完成 | 中 | 高 | P2 |
+| 模型过拟合 | 中 | 中 | P3 |
+| 数据质量不满足要求 | 低 | 高 | P4 |
+
+---
+
+## 五、技术方案详细设计
+
+### 5.1 故障诊断模型架构设计
+
+#### 5.1.1 输入数据规格
+
+```
+输入: (batch_size, 100, 16)
+     ├── 100: 时间步数 (5秒 @ 20Hz)
+     └── 16: 特征数
+          ├── 位置: x, y, z (3)
+          ├── 速度: vx, vy, vz (3)
+          ├── 加速度: ax, ay, az (3)
+          ├── 角速度: gx, gy, gz (3)
+          ├── 电压: voltage (1)
+          └── 电流: current0, current1, current2 (3)
+```
+
+#### 5.1.2 推荐模型：1D-CNN + LSTM
+
+```python
+import torch
+import torch.nn as nn
+
+class FaultDiagnosisNet(nn.Module):
+    """
+    故障诊断网络：1D-CNN + LSTM 混合架构
+    - 1D-CNN: 提取局部时序特征
+    - LSTM: 捕捉长时序依赖
+    """
+
+    def __init__(self, n_features=16, n_classes=5, hidden_size=128):
+        super().__init__()
+
+        # 1D-CNN 特征提取器
+        self.conv_block1 = nn.Sequential(
+            nn.Conv1d(n_features, 64, kernel_size=3, padding=1),
+            nn.BatchNorm1d(64),
+            nn.ReLU(),
+            nn.MaxPool1d(2)  # 100 -> 50
+        )
+        self.conv_block2 = nn.Sequential(
+            nn.Conv1d(64, 128, kernel_size=3, padding=1),
+            nn.BatchNorm1d(128),
+            nn.ReLU(),
+            nn.MaxPool1d(2)  # 50 -> 25
+        )
+        self.conv_block3 = nn.Sequential(
+            nn.Conv1d(128, 256, kernel_size=3, padding=1),
+            nn.BatchNorm1d(256),
+            nn.ReLU()
+        )
+
+        # LSTM 层
+        self.lstm = nn.LSTM(
+            input_size=256,
+            hidden_size=hidden_size,
+            num_layers=2,
+            batch_first=True,
+            dropout=0.3
+        )
+
+        # 全连接分类器
+        self.classifier = nn.Sequential(
+            nn.Linear(hidden_size, 64),
+            nn.ReLU(),
+            nn.Dropout(0.5),
+            nn.Linear(64, n_classes)
+        )
+
+    def forward(self, x):
+        # x: (batch, seq_len, features) -> (batch, features, seq_len)
+        x = x.permute(0, 2, 1)
+
+        # CNN 特征提取
+        x = self.conv_block1(x)
+        x = self.conv_block2(x)
+        x = self.conv_block3(x)
+
+        # 转换为LSTM输入格式: (batch, seq_len, features)
+        x = x.permute(0, 2, 1)
+
+        # LSTM
+        lstm_out, (h_n, c_n) = self.lstm(x)
+        # 取最后一层的输出
+        x = lstm_out[:, -1, :]
+
+        # 分类
+        x = self.classifier(x)
+        return x
+```
+
+#### 5.1.3 备选模型对比
+
+| 模型 | 优点 | 缺点 | 适用场景 |
+|------|------|------|----------|
+| 1D-CNN + LSTM | 时序+局部特征兼顾 | 参数量较大 | 通用场景(推荐) |
+| Transformer | 长依赖建模能力强 | 需要更多数据 | 数据充足时 |
+| 1D-CNN + Attention | 可解释性强 | 实现复杂度高 | 需要特征可视化时 |
+| 纯LSTM/GRU | 简单轻量 | 局部特征提取弱 | 小数据集 |
+
+### 5.2 数据增强策略
+
+```python
+def augment_data(X, y):
+    """数据增强 - 扩充训练样本"""
+    X_aug = []
+    y_aug = []
+
+    for i in range(len(X)):
+        x = X[i]
+
+        # 1. 原始样本
+        X_aug.append(x)
+        y_aug.append(y[i])
+
+        # 2. 时序抖动
+        jitter = np.random.normal(0, 0.01, x.shape)
+        X_aug.append(x + jitter)
+        y_aug.append(y[i])
+
+        # 3. 幅度缩放
+        scale = np.random.uniform(0.9, 1.1)
+        X_aug.append(x * scale)
+        y_aug.append(y[i])
+
+        # 4. 添加高斯噪声
+        noise = np.random.normal(0, 0.02, x.shape)
+        X_aug.append(x + noise)
+        y_aug.append(y[i])
+
+    return np.array(X_aug), np.array(y_aug)
+```
+
+### 5.3 类别平衡策略
+
+```python
+# 计算类别权重（基于样本数倒数）
+class_counts = [110, 43, 19, 17]
+class_weights = [1.0 / c for c in class_counts]
+# 归一化
+class_weights = [w / sum(class_weights) * len(class_counts) for w in class_weights]
+# [1.0, 2.56, 5.79, 6.47]
+
+criterion = nn.CrossEntropyLoss(
+    weight=torch.tensor(class_weights, dtype=torch.float32)
+)
+```
+
+### 5.4 训练配置
+
+```python
+config = {
+    'batch_size': 16,
+    'epochs': 100,
+    'learning_rate': 1e-3,
+    'optimizer': 'Adam',
+    'weight_decay': 1e-4,
+    'scheduler': {
+        'type': 'ReduceLROnPlateau',
+        'mode': 'min',
+        'factor': 0.5,
+        'patience': 10
+    },
+    'early_stopping': {
+        'patience': 15,
+        'min_delta': 1e-3
+    },
+    'validation_split': 0.2,
+}
+```
+
+### 5.5 推理节点设计
+
+```python
+# inference_node.py
+class FaultDiagnosisNode:
+    def __init__(self):
+        # 加载模型
+        self.model = torch.load('fault_diagnosis_model.pth')
+        self.model.eval()
+
+        # 环形缓冲区 (5秒 @ 20Hz = 100点)
+        self.buffer = RingBuffer(shape=(100, 16))
+
+        # 加载归一化参数
+        with open('norm_params.pkl', 'rb') as f:
+            self.norm_params = pickle.load(f)
+
+        # 订阅话题
+        rospy.Subscriber('/odom', Odometry, self.odom_callback)
+        rospy.Subscriber('/imu', Imu, self.imu_callback)
+        rospy.Subscriber('/current_data', Float32MultiArray, self.current_callback)
+
+        # 发布诊断结果
+        self.diag_pub = rospy.Publisher('/diagnosis/result', String, queue_size=10)
+
+    def diagnose(self):
+        """执行一次诊断"""
+        if len(self.buffer) < 100:
+            return
+
+        # 构建窗口
+        window = self.buffer.get_last(100)
+
+        # 归一化
+        window = self.normalize(window)
+
+        # 转换为tensor
+        window_tensor = torch.tensor(window, dtype=torch.float32).unsqueeze(0)
+
+        # 推理
+        with torch.no_grad():
+            output = self.model(window_tensor)
+            probs = torch.softmax(output, dim=1)[0]
+            pred = torch.argmax(probs).item()
+            confidence = probs[pred].item()
+
+        # 发布结果
+        result = {
+            'fault_type': pred,
+            'fault_name': LABEL_NAMES[pred],
+            'confidence': confidence,
+            'all_probabilities': probs.tolist(),
+            'timestamp': rospy.Time.now().to_sec()
+        }
+        self.diag_pub.publish(json.dumps(result))
+```
+
+### 5.6 Web前端诊断展示设计
+
+```javascript
+// 诊断结果订阅与渲染
+function initDiagnosisPanel() {
+    // 订阅诊断结果话题
+    subscribe('/diagnosis/result', 'std_msgs/String');
+
+    // 监听诊断结果
+    socket.onmessage = function(event) {
+        const p = JSON.parse(event.data);
+        if (p.topic === '/diagnosis/result') {
+            updateDiagnosis(p.msg.data);
+        }
+    };
+}
+
+function updateDiagnosis(data) {
+    const result = JSON.parse(data);
+    const labels = ['正常', '驱动异常', '轮子打滑', '轴偏心'];
+    const colors = ['#4CAF50', '#F44336', '#FF9800', '#9C27B0'];
+
+    // 更新诊断卡片
+    document.getElementById('faultType').textContent = labels[result.fault_type];
+    document.getElementById('faultType').style.color = colors[result.fault_type];
+    document.getElementById('confidence').textContent = (result.confidence * 100).toFixed(1) + '%';
+    document.getElementById('confidenceBar').style.width = (result.confidence * 100) + '%';
+
+    // 更新概率条
+    result.all_probabilities.forEach((prob, i) => {
+        document.getElementById('probBar' + i).style.width = (prob * 100) + '%';
+        document.getElementById('probLabel' + i).textContent = labels[i] + ': ' + (prob * 100).toFixed(1) + '%';
+    });
+
+    // 报警判断
+    if (result.confidence > 0.8 && result.fault_type !== 0) {
+        showAlert(result.fault_name, result.confidence);
+    }
+}
+
+function showAlert(faultType, confidence) {
+    // 显示报警通知
+    const alertDiv = document.createElement('div');
+    alertDiv.className = 'alert alert-danger';
+    alertDiv.innerHTML = `
+        <strong>⚠️ ${faultType}</strong>
+        <p>置信度: ${(confidence * 100).toFixed(1)}%</p>
+        <button onclick="acknowledgeAlert()">确认</button>
+    `;
+    document.getElementById('alertContainer').appendChild(alertDiv);
+
+    // 播放报警音
+    playAlertSound();
+}
+```
+
+---
+
+## 六、下一步工作计划
+
+### 6.1 详细任务分解
+
+| 阶段 | 时间 | 任务 | 产出 | 优先级 |
+|------|------|------|------|--------|
+| **数据补充** | 4月底 | 增加各类别样本量至50+ | 扩充后数据集 | 🔴高 |
+| **模型开发** | 5月初 | 搭建PyTorch训练框架 | train.py | 🔴高 |
+| | | 实现1D-CNN+LSTM模型 | model.py | 🔴高 |
+| **模型训练** | 5月中 | 数据增强与平衡策略 | 训练脚本 | 🔴高 |
+| | | 超参数调优、交叉验证 | 最佳模型 | 🔴高 |
+| **推理节点** | 5月中 | 实现inference_node.py | ROS节点 | 🟡中 |
+| | | 集成到ROS系统 | 可用服务 | 🟡中 |
+| **前端UI** | 5月底 | 诊断结果展示组件 | Web组件 | 🟡中 |
+| | | 报警系统 | 报警功能 | 🟡中 |
+| **联调测试** | 6月初 | 端到端测试 | 可用系统 | 🟡中 |
+| **论文撰写** | 6月中 | 论文撰写 | 毕业论文 | 🟡中 |
+
+### 6.2 时间规划表
+
+```
+4月 (剩余10天)
+│
+└── 4/21-4/25: 数据采集补充
+    └── 增加各类别样本 (约3天)
+        └── 每类再采集5-10分钟
+
+5月 (31天)
+│
+├── 5/1-5/7: 模型设计与实现
+│   ├── 搭建PyTorch训练框架
+│   ├── 实现1D-CNN+LSTM模型
+│   └── 数据增强与平衡策略
+│
+├── 5/8-5/14: 模型训练
+│   ├── 超参数调优
+│   ├── 交叉验证
+│   └── 保存最佳模型
+│
+├── 5/15-5/21: 推理节点开发
+│   ├── 实现inference_node.py
+│   ├── 集成到ROS系统
+│   └── 实时诊断测试
+│
+└── 5/22-5/28: 前端诊断UI
+    ├── 诊断结果展示组件
+    ├── 报警系统
+    └── 故障历史记录
+
+6月 (30天)
+│
+├── 6/1-6/7: 系统联调
+│   ├── 端到端测试
+│   ├── 性能优化
+│   └── Bug修复
+│
+├── 6/8-6/14: 论文撰写
+│   ├── 引言与相关工作
+│   ├── 系统设计与实现
+│   └── 实验与分析
+│
+├── 6/15-6/21: 论文完善
+│   ├── 补充实验结果
+│   ├── 格式调整
+│   └── 查重与修改
+│
+└── 6/22-6/30: 答辩准备
+    ├── PPT制作
+    ├── 答辩演练
+    └── 最终提交
+```
+
+---
+
+## 七、毕设任务完成度评估
+
+### 7.1 任务分解与完成度
+
+| 任务 | 要求 | 已完成 | 完成度 | 说明 |
+|------|------|--------|--------|------|
+| 任务一 | 多源传感器数据采集 | 电流/电压/IMU采集 | 80% | 缺转速/振动传感器 |
+| 任务二 | 深度神经网络模型 | 仅完成数据准备 | 20% | 模型未设计 |
+| 任务三 | 前端UI设计 | 基础监控面板 | 60% | 缺诊断结果展示 |
+
+### 7.2 总体进度评估
+
+```
+已完成: ████████████░░░░░░░░░░░░░░░░░░░ 50%
+待完成: ████████████████████████████████████████ 50%
+```
+
+### 7.3 关键里程碑
+
+| 里程碑 | 目标日期 | 状态 | 备注 |
+|--------|----------|------|------|
+| M1: 数据采集完成 | 2026-04-20 | ✅ 已完成 | 4类故障数据 |
+| M2: 数据处理完成 | 2026-04-20 | ✅ 已完成 | 预处理流水线 |
+| M3: Web控制完成 | 2026-04-20 | ✅ 已完成 | 基础遥控功能 |
+| M4: 模型训练完成 | 2026-05-14 | ⏳ 待开始 | - |
+| M5: 推理节点完成 | 2026-05-21 | ⏳ 待开始 | - |
+| M6: 前端诊断UI | 2026-05-28 | ⏳ 待开始 | - |
+| M7: 系统联调完成 | 2026-06-07 | ⏳ 待开始 | - |
+| M8: 论文提交 | 2026-06-30 | ⏳ 待开始 | - |
+
+---
+
+## 八、附录
+
+### 8.1 关键文件路径
+
+| 文件 | 路径 | 说明 |
+|------|------|------|
+| 主采集逻辑 | `turn_on_wheeltec_robot/scripts/data_collector.py` | 数据采集核心 |
+| 电流解析 | `turn_on_wheeltec_robot/scripts/current_reader.py` | 串口协议解析 |
+| 数据预处理 | `turn_on_wheeltec_robot/scripts/preprocess_data.py` | 预处理核心 |
+| 滑动窗口 | `turn_on_wheeltec_robot/scripts/create_sliding_windows.py` | 窗口分割 |
+| 数据验证 | `turn_on_wheeltec_robot/scripts/validate_dataset.py` | 质量检查 |
+| 端到端流水线 | `turn_on_wheeltec_robot/scripts/process_pipeline.py` | 一键处理 |
+| Web适配器 | `turn_on_wheeltec_robot/scripts/cmd_vel_web_adapter.py` | 安全控制 |
+| Web面板 | `turn_on_wheeltec_robot/web/index.html` | 前端界面 |
+| 中期总结 | `中期总结` | 本文档 |
+
+### 8.2 数据集目录
+
+| 目录 | 故障类型 | 状态 |
+|------|----------|------|
+| `data/20260419_normal/` | 正常 | ✅ 可用 |
+| `data/20260419_drive_fault/` | 驱动异常 | ✅ 可用 |
+| `data/20260420_wheel_slip/` | 轮子打滑 | ✅ 可用 |
+| `data/20260420_shaft_eccentric/` | 电机轴偏心 | ✅ 可用 |
+
+### 8.3 ROS话题总览
+
+| 话题 | 方向 | 用途 | 状态 |
+|------|------|------|------|
+| `/odom` | 订阅→采集 | 里程计数据 | ✅ |
+| `/imu` | 订阅→采集 | IMU数据 | ✅ |
+| `/PowerVoltage` | 订阅→采集 | 电压数据 | ✅ |
+| `/current_data` | 订阅→采集 | 电流数据 | ✅ |
+| `/cmd_vel` | 发布 | 底盘控制 | ✅ |
+| `/diagnosis/result` | 发布 | 诊断结果 | ❌ 待开发 |
+
+### 8.4 参考资料
+
+1. Hochreiter, S., & Schmidhuber, J. (1997). Long Short-Term Memory. Neural Computation, 9(8), 1735-1780.
+2. Kim, Y. (2014). Convolutional Neural Networks for Sentence Classification. EMNLP.
+3. Zhou, Z., & Yu, H. (2020). Deep Learning for Fault Diagnosis of Rotating Machinery. IEEE Transactions on Industrial Electronics.
+4. WHEELTEC. R550PLUS Robot Documentation.
+
+---
+
+**报告撰写日期**: 2026年4月21日
+
+**撰写人**: 杨鹏（燕山大学本科毕业设计）

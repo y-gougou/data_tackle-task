@@ -78,7 +78,6 @@
 | 1 | drive_fault | 驱动异常（单轮堵转） |
 | 2 | wheel_slip | 轮子打滑/损坏 |
 | 3 | shaft_eccentric | 电机轴偏心 |
-| 4 | voltage_low | 电池电压偏低 |
 
 ---
 

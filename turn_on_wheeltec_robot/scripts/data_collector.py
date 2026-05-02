@@ -19,7 +19,6 @@ R550PLUS 三全向轮机器人数据采集节点
   1 - 驱动异常（单轮堵转）
   2 - 轮子打滑
   3 - 电机轴偏心
-  4 - 电池电压偏低
 
 使用方法：
   roslaunch turn_on_wheeltec_robot data_collector.launch fault_label:=0
@@ -43,8 +42,7 @@ class DataCollector:
         0: 'normal',
         1: 'drive_fault',
         2: 'wheel_slip',
-        3: 'shaft_eccentric',
-        4: 'voltage_low'
+        3: 'shaft_eccentric'
     }
 
     def __init__(self, fault_label=0):

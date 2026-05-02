@@ -45,8 +45,7 @@ class DataPipeline:
         0: 'normal',
         1: 'drive_fault',
         2: 'wheel_slip',
-        3: 'shaft_eccentric',
-        4: 'voltage_low'
+        3: 'shaft_eccentric'
     }
 
     def __init__(self, csv_path, output_dir=None, fault_label=None, skip_first=5):
@@ -96,8 +95,8 @@ class DataPipeline:
             return 2
         elif 'shaft' in filename_lower or 'eccentric' in filename_lower:
             return 3
-        elif 'voltage_low' in filename_lower or 'low_voltage' in filename_lower or 'voltage' in filename_lower:
-            return 4
+        elif 'shaft' in filename_lower or 'eccentric' in filename_lower:
+            return 3
 
         # 从文件名尝试提取数字
         for i in range(5):
@@ -203,9 +202,9 @@ class DataPipeline:
         from validate_dataset import DatasetValidator
 
         validator = DatasetValidator(self.windows_output_dir)
-        validator.run_validation()
+        report = validator.validate()
 
-        return validator.report
+        return report
 
     def run(self):
         """运行完整流程"""
@@ -247,7 +246,7 @@ def main():
     parser.add_argument('--csv_dir', type=str,
                        help='CSV目录路径（批量处理）')
     parser.add_argument('--fault_label', type=int, choices=[0,1,2,3,4],
-                       help='故障标签（0=normal, 1=drive_fault, 2=wheel_slip, 3=shaft_eccentric, 4=voltage_low）')
+                       help='故障标签（0=normal, 1=drive_fault, 2=wheel_slip, 3=shaft_eccentric）')
     parser.add_argument('--output', type=str,
                        help='输出目录（默认自动生成）')
     parser.add_argument('--skip_first', type=float, default=5,

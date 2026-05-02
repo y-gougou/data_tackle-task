@@ -181,8 +181,7 @@ class DataPreprocessor:
         0: 'normal',
         1: 'drive_fault',
         2: 'wheel_slip',
-        3: 'shaft_eccentric',
-        4: 'voltage_low'
+        3: 'shaft_eccentric'
     }
 
     def __init__(self, data_dir):
